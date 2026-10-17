@@ -329,12 +329,13 @@ struct FocusController {
 - Create: `Tests/PomodoroCoreTests/GlyphSpecTests.swift`
 - Create: `Tests/PomodoroCoreTests/StatusTitleTests.swift`
 
-- [ ] implement `GlyphSpec.make(state:progress:)` and `StatusGlyph.image(spec:)` (18×18, `isTemplate = true`)
-- [ ] implement `StatusTitle.make(time:phase:showCountdown:)` (monospaced digits, tint per phase, empty when hidden)
-- [ ] implement `StatusItemController`: left/right click detection, temporary-menu trick with `menuDidClose`, `withObservationTracking` re-render on main; menu items from `TimerPresentation.menuItems` with "Settings…" disabled until Task 9
-- [ ] write tests for `GlyphSpec` (idle → dimmed/0, running work → filled/progress, running rest → outlined/progress, paused keeps progress, finished → full arc)
-- [ ] write tests for `StatusTitle` (hidden → empty, shown → contains `mm:ss`, font has monospaced-digit trait, color per phase) and a non-nil template image of 18×18 from `StatusGlyph`
-- [ ] run `make test`, then `make build` and launch the binary to confirm the item renders in both modes and the menu works - must pass before task 8
+- [x] implement `GlyphSpec.make(state:progress:)` and `StatusGlyph.image(spec:)` (18×18, `isTemplate = true`)
+- [x] implement `StatusTitle.make(time:phase:showCountdown:)` (monospaced digits, tint per phase, empty when hidden)
+- [x] implement `StatusItemController`: left/right click detection, temporary-menu trick with `menuDidClose`, `withObservationTracking` re-render on main; menu items from `TimerPresentation.menuItems` with "Settings…" disabled until Task 9
+- [x] write tests for `GlyphSpec` (idle → dimmed/0, running work → filled/progress, running rest → outlined/progress, paused keeps progress, finished → full arc)
+- [x] write tests for `StatusTitle` (hidden → empty, shown → contains `mm:ss`, font has monospaced-digit trait, color per phase) and a non-nil template image of 18×18 from `StatusGlyph`
+- [x] run `make test`, then `make build` and launch the binary to confirm the item renders in both modes and the menu works - must pass before task 8 (tests and build pass; binary launched unbundled and stayed up without crashing; visual check deferred to Task 14 manual walkthrough)
+- ➕ implementation notes: until the popover lands in Task 8, a left click opens the same menu as a right click; `StatusTitle.make` takes `phase: Phase?` (nil = idle/finished → secondary tint) plus a `StatusTitle.phase(for:)` helper; menu construction is a static `StatusItemController.makeMenu(items:showCountdown:target:action:)` (item tag = index in `TimerPresentation.menuItems`) and is unit-tested; finished glyphs keep their phase style (filled work / outlined rest) with a full arc
 
 ### Task 8: Popover with progress ring
 

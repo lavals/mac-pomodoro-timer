@@ -9,6 +9,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificat
     nonisolated static let presentationOptions: UNNotificationPresentationOptions = [.banner, .list]
 
     public private(set) var coordinator: TimerCoordinator?
+    private var statusItemController: StatusItemController?
 
     override public init() {
         super.init()
@@ -21,12 +22,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificat
             center.delegate = self
             center.requestAuthorization(options: [.alert]) { _, _ in }
         }
-        coordinator = TimerCoordinator(
+        let coordinator = TimerCoordinator(
             preferences: Preferences(),
             sessionStore: SessionStore(),
             focus: FocusController(),
             alerts: SystemAlerts()
         )
+        self.coordinator = coordinator
+        statusItemController = StatusItemController(coordinator: coordinator)
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
