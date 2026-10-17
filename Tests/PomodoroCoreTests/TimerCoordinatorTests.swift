@@ -394,6 +394,38 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.runner.calls.isEmpty)
     }
 
+    @Test func restoresRunningWorkWithAStaleFlagTurnsFocusOnWithoutOffFirst() async {
+        let running = TimerState.running(phase: .work, endDate: t0.addingTimeInterval(600), total: 1500)
+        let h = Harness(saved: running, focusWasOn: true)
+        defer { h.cleanUp() }
+        await h.settle()
+
+        #expect(h.focusRuns == [focusOn])
+        #expect(h.store.focusTurnedOn)
+    }
+
+    @Test func failedFocusOnAfterACrashKeepsTheFlagSoFocusIsTurnedOffLater() async {
+        let running = TimerState.running(phase: .work, endDate: t0.addingTimeInterval(600), total: 1500)
+        let h = Harness(saved: running, focusWasOn: true)
+        defer { h.cleanUp() }
+        let listing = bothShortcuts.joined(separator: "\n")
+        // set before the restore chain runs: the check passes, the On run fails
+        h.runner.setHandler { _, args in
+            args == ["list"]
+                ? ShellResult(status: 0, stdout: listing, stderr: "")
+                : ShellResult(status: 1, stdout: "", stderr: "busy")
+        }
+        await h.settle()
+        #expect(h.focusRuns == [focusOn])
+        #expect(h.store.focusTurnedOn)
+
+        h.runner.setHandler { _, _ in ShellResult(status: 0, stdout: "", stderr: "") }
+        h.coordinator.skip()
+        await h.settle()
+        #expect(h.focusRuns == [focusOn, focusOff])
+        #expect(h.store.focusTurnedOn == false)
+    }
+
     @Test func restoresPausedWithoutResurrectingASession() async {
         let paused = TimerState.paused(phase: .work, remaining: 600, total: 1500)
         let h = Harness(saved: paused)
@@ -648,6 +680,30 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.store.focusTurnedOn == false)
     }
 
+    @Test func failedFocusOnKeepsTheFlagAfterAFocusOffThatKeptFailing() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        h.coordinator.start()
+        await h.settle()
+        h.runner.setHandler { _, _ in ShellResult(status: 1, stdout: "", stderr: "busy") }
+
+        h.coordinator.pause()
+        await h.settle()
+        #expect(h.store.focusTurnedOn)
+
+        // the On fails too: Focus is still on from before, so the flag must stay set
+        h.coordinator.start()
+        await h.settle()
+        #expect(h.focusRuns == [focusOn, focusOff, focusOff, focusOn])
+        #expect(h.store.focusTurnedOn)
+
+        h.runner.setHandler { _, _ in ShellResult(status: 0, stdout: "", stderr: "") }
+        h.coordinator.skip()
+        await h.settle()
+        #expect(h.focusRuns == [focusOn, focusOff, focusOff, focusOn, focusOff])
+        #expect(h.store.focusTurnedOn == false)
+    }
+
     // MARK: dispatch
 
     @Test func performDispatchesTimerItems() async {
@@ -732,6 +788,45 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.focusRuns == [focusOn, focusOff])
         #expect(h.store.focusTurnedOn)
         release.signal()
+    }
+
+    @Test func quittingWhileFocusOnIsStillRunningKeepsTheFlagForTheNextLaunch() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        // the On run hangs past the chain budget; the termination Off succeeds first
+        let release = DispatchSemaphore(value: 0)
+        let listing = bothShortcuts.joined(separator: "\n")
+        h.runner.setHandler { _, args in
+            if args == focusOn { release.wait() }
+            return ShellResult(status: 0, stdout: args == ["list"] ? listing : "", stderr: "")
+        }
+        h.coordinator.start()
+
+        await h.coordinator.prepareForTermination(chainBudget: .milliseconds(100), offBudget: .seconds(2))
+
+        #expect(h.focusRuns == [focusOn, focusOff])
+        #expect(h.store.focusTurnedOn)
+
+        // the orphaned On finishes after the Off and leaves Focus on
+        release.signal()
+        await h.settle()
+        #expect(h.store.focusTurnedOn)
+
+        // next launch after the work phase expired turns Focus off
+        let relaunch = TimerCoordinator(
+            now: { t0.addingTimeInterval(2000) },
+            preferences: h.preferences,
+            sessionStore: h.store,
+            focus: FocusController(runner: h.runner),
+            alerts: h.alerts,
+            makeTicker: h.tickers.make,
+            wakeCenter: NotificationCenter(),
+            focusOffRetryDelay: .zero
+        )
+        await relaunch.waitForPendingEffects()
+        #expect(relaunch.state == .finished(phase: .work))
+        #expect(h.focusRuns == [focusOn, focusOff, focusOff])
+        #expect(h.store.focusTurnedOn == false)
     }
 
     @Test(arguments: [

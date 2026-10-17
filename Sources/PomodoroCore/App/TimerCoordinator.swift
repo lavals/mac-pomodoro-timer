@@ -194,19 +194,23 @@ public final class TimerCoordinator {
     /// Called before the app quits: lets queued Focus calls finish (at most `chainBudget`), then
     /// turns Focus off if the app turned it on (at most `offBudget`). Bounded so quitting never
     /// hangs on a stuck `shortcuts` run.
+    ///
+    /// When the chain is still running (e.g. a slow Focus On), that On may finish after the Off
+    /// and switch Focus back on, so the flag stays set and the next launch turns Focus off again.
     public func prepareForTermination(
         chainBudget: Duration = .milliseconds(1500),
         offBudget: Duration = .seconds(2)
     ) async {
+        var chainFinished = true
         if let pendingEffects {
-            _ = await Self.value(of: pendingEffects, within: chainBudget)
+            chainFinished = await Self.value(of: pendingEffects, within: chainBudget) != nil
         }
         guard sessionStore.focusTurnedOn else { return }
         let focus = self.focus
         let off = Task.detached {
             await focus.setFocus(false, timeout: offBudget / .seconds(1))
         }
-        if case .success = await Self.value(of: off, within: offBudget) {
+        if case .success = await Self.value(of: off, within: offBudget), chainFinished {
             sessionStore.focusTurnedOn = false
         }
     }
@@ -283,11 +287,13 @@ public final class TimerCoordinator {
         }
         guard focusAvailability == .available else { return }
         // marked before the run so a quit while it is in flight still turns Focus off
+        let wasOn = sessionStore.focusTurnedOn
         sessionStore.focusTurnedOn = true
         let result = await focus.setFocus(true)
-        // a timed-out run may still have switched Focus on; any other failure did not
+        // a timed-out run may still have switched Focus on; any other failure did not, so the
+        // flag goes back to what it was (Focus may still be on from an earlier failed Off)
         if case .failure(let error) = result, error != .timeout {
-            sessionStore.focusTurnedOn = false
+            sessionStore.focusTurnedOn = wasOn
         }
         record(result)
     }
