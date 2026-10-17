@@ -255,14 +255,14 @@ struct FocusController {
 - Create: `Tests/PomodoroCoreTests/TimerEngineTests.swift`
 - Create: `Tests/PomodoroCoreTests/TimeFormattingTests.swift`
 
-- [ ] implement the types from Technical Details with `Codable` + `Equatable`
-- [ ] implement `init(state:)`, `start`, `pause`, `skip`, `reset`, `tick`, `remaining(now:)`, `progress(now:)`, `nextPhase`
-- [ ] implement `formatRemaining(_:) -> String` (`mm:ss`, ceil to seconds, caps at `99:59`)
-- [ ] write table-driven tests (`@Test(arguments:)`) covering every row of the transition table, including no-op rows and **resume from paused(work) emitting `focusOn`**
-- [ ] write tests for exact effect ordering at work end and rest end, and that `skip` never chimes
-- [ ] write tests for sleep/wake: `tick` with `now` far past `endDate` finishes once and the next `tick` returns `[]`; `remaining` never goes negative; `progress` clamps to 1
-- [ ] write tests for `formatRemaining` (0, 59, 60, 1500, 1499.6 → `25:00`, overflow → `99:59`)
-- [ ] run `make test` - must pass before task 4
+- [x] implement the types from Technical Details with `Codable` + `Equatable`
+- [x] implement `init(state:)`, `start`, `pause`, `skip`, `reset`, `tick`, `remaining(now:)`, `progress(now:)`, `nextPhase`
+- [x] implement `formatRemaining(_:) -> String` (`mm:ss`, ceil to seconds, caps at `99:59`)
+- [x] write table-driven tests (`@Test(arguments:)`) covering every row of the transition table, including no-op rows and **resume from paused(work) emitting `focusOn`**
+- [x] write tests for exact effect ordering at work end and rest end, and that `skip` never chimes
+- [x] write tests for sleep/wake: `tick` with `now` far past `endDate` finishes once and the next `tick` returns `[]`; `remaining` never goes negative; `progress` clamps to 1
+- [x] write tests for `formatRemaining` (0, 59, 60, 1500, 1499.6 → `25:00`, overflow → `99:59`)
+- [x] run `make test` - must pass before task 4
 
 ### Task 4: Session persistence and restore
 
