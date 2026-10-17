@@ -308,14 +308,15 @@ struct FocusController {
 - Create: `Tests/PomodoroCoreTests/TimerCoordinatorTests.swift`
 - Create: `Tests/PomodoroCoreTests/TimerPresentationTests.swift`
 
-- [ ] implement `Alerts` protocol and `SystemAlerts`
-- [ ] implement `TimerCoordinator` per Technical Details (stored `now`, unconditional save after each mutation, effect execution rules, focus skipping when unavailable, `lastFocusError`, `.common`-mode timer only while running, `beginActivity`, wake observer on `NSWorkspace.shared.notificationCenter`, `prepareForTermination`)
-- [ ] implement `TimerPresentation` pure helpers (`primaryActionTitle`, `phaseLabel`, `ringTint`, `menuItems`)
-- [ ] implement `AppDelegate` (delegate `willPresent` → banner + list, `requestAuthorization` every launch behind the bundle-id guard, `applicationWillTerminate` → `prepareForTermination`)
-- [ ] write coordinator tests with a fake clock, `FakeShellRunner`, `FakeAlerts`, `TestDefaults`: start saves state and calls focus on; advancing the clock and calling `tick()` plays the chime, calls focus off, then posts the notification; pause/skip/reset each persist the new state; `displayTime` changes after the clock advances and an observation registered on it fires; idle and finished show the next phase's full duration
-- [ ] write tests that focus effects are skipped when availability is `.missing` with no error set; a failed `setFocus` sets `lastFocusError` and the next success clears it; the timer keeps running regardless; `prepareForTermination` calls focus off only when work was running
-- [ ] write tests for `TimerPresentation` mappings for every state
-- [ ] run `make test` - must pass before task 7
+- [x] implement `Alerts` protocol and `SystemAlerts`
+- [x] implement `TimerCoordinator` per Technical Details (stored `now`, unconditional save after each mutation, effect execution rules, focus skipping when unavailable, `lastFocusError`, `.common`-mode timer only while running, `beginActivity`, wake observer on `NSWorkspace.shared.notificationCenter`, `prepareForTermination`)
+- [x] implement `TimerPresentation` pure helpers (`primaryActionTitle`, `phaseLabel`, `ringTint`, `menuItems`)
+- [x] implement `AppDelegate` (delegate `willPresent` → banner + list, `requestAuthorization` every launch behind the bundle-id guard, `applicationWillTerminate` → `prepareForTermination`)
+- [x] write coordinator tests with a fake clock, `FakeShellRunner`, `FakeAlerts`, `TestDefaults`: start saves state and calls focus on; advancing the clock and calling `tick()` plays the chime, calls focus off, then posts the notification; pause/skip/reset each persist the new state; `displayTime` changes after the clock advances and an observation registered on it fires; idle and finished show the next phase's full duration
+- [x] write tests that focus effects are skipped when availability is `.missing` with no error set; a failed `setFocus` sets `lastFocusError` and the next success clears it; the timer keeps running regardless; `prepareForTermination` calls focus off only when work was running
+- [x] write tests for `TimerPresentation` mappings for every state
+- [x] run `make test` - must pass before task 7
+- ➕ implementation notes: while `focusAvailability` is `.unknown` (no check yet since launch) the first Focus effect runs `shortcuts list` first, so restore effects and the first start work without the popover having been opened; `prepareForTermination` runs only for `running(work)` with availability `.available` (paused work already turned Focus off); the ticker is a `Ticker` protocol + `TickerFactory` (real `SystemTicker` owns the `beginActivity` token); the wake observer `NotificationCenter` is injectable (tests post on a private center); `PrimaryAction`, `RingTint` and `MenuItem` are small enums in `TimerPresentation.swift`
 
 ### Task 7: Status item with two display modes and right-click menu
 
