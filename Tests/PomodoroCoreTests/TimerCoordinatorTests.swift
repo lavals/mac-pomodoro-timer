@@ -437,6 +437,39 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.runner.calls.isEmpty)
     }
 
+    @Test(arguments: [
+        TimerState.paused(phase: .work, remaining: 600, total: 1500),
+        .idle,
+        .finished(phase: .work),
+        .finished(phase: .rest),
+        .running(phase: .rest, endDate: t0.addingTimeInterval(120), total: 300),
+    ])
+    func restoreWithAStaleFlagTurnsFocusOff(saved: TimerState) async {
+        let h = Harness(saved: saved, focusWasOn: true)
+        defer { h.cleanUp() }
+        await h.settle()
+
+        #expect(h.coordinator.state == saved)
+        #expect(h.focusRuns == [focusOff])
+        #expect(h.store.focusTurnedOn == false)
+    }
+
+    @Test func restoreWithAStaleFlagAndExpiredWorkTurnsFocusOffOnce() async {
+        let h = Harness(saved: .running(phase: .work, endDate: t0.addingTimeInterval(-1), total: 1500), focusWasOn: true)
+        defer { h.cleanUp() }
+        await h.settle()
+
+        #expect(h.runner.calls.map(\.args) == [focusOff])
+    }
+
+    @Test func restoreWithoutAFlagLeavesFocusAlone() async {
+        let h = Harness(saved: .idle)
+        defer { h.cleanUp() }
+        await h.settle()
+
+        #expect(h.runner.calls.isEmpty)
+    }
+
     @Test func corruptSavedSessionIsIgnoredAndOverwritten() async {
         let h = Harness(savedData: Data("not a timer state".utf8))
         defer { h.cleanUp() }

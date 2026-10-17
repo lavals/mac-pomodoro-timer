@@ -79,6 +79,8 @@ public final class TimerCoordinator {
     @ObservationIgnored private let focusOffRetryDelay: Duration
 
     /// Restores the saved session, saves the reconciled state and performs the restore effects.
+    /// If the last run left `SessionStore.focusTurnedOn` set and no work phase is still running,
+    /// Focus is turned off.
     ///
     /// - Parameters:
     ///   - wakeCenter: where `NSWorkspace.didWakeNotification` is observed.
@@ -103,7 +105,12 @@ public final class TimerCoordinator {
         self.focusOffRetryDelay = focusOffRetryDelay
         let launchTime = clock()
         now = launchTime
-        let (restored, effects) = TimerEngine.restore(sessionStore.load(), now: launchTime)
+        var (restored, effects) = TimerEngine.restore(sessionStore.load(), now: launchTime)
+        // a flag left set by the last run (quit race, crash before a queued Off) means Focus may
+        // still be on; turn it off unless a work phase is still running or restore already does
+        if sessionStore.focusTurnedOn, !effects.contains(.focusOn), !effects.contains(.focusOff) {
+            effects.append(.focusOff)
+        }
         engine = restored
         apply(effects)
 
@@ -196,7 +203,8 @@ public final class TimerCoordinator {
     /// hangs on a stuck `shortcuts` run.
     ///
     /// When the chain is still running (e.g. a slow Focus On), that On may finish after the Off
-    /// and switch Focus back on, so the flag stays set and the next launch turns Focus off again.
+    /// and switch Focus back on, so the flag stays set. The next launch then turns Focus off,
+    /// whatever the saved state, unless a work phase is still running (it turns Focus on instead).
     public func prepareForTermination(
         chainBudget: Duration = .milliseconds(1500),
         offBudget: Duration = .seconds(2)
