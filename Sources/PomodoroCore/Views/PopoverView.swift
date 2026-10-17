@@ -4,9 +4,11 @@ import SwiftUI
 /// the secondary session control. Reads everything from the coordinator.
 public struct PopoverView: View {
     let coordinator: TimerCoordinator
+    let openSettings: () -> Void
 
-    public init(coordinator: TimerCoordinator) {
+    public init(coordinator: TimerCoordinator, openSettings: @escaping () -> Void = {}) {
         self.coordinator = coordinator
+        self.openSettings = openSettings
     }
 
     public var body: some View {
@@ -47,14 +49,13 @@ public struct PopoverView: View {
                         .buttonStyle(.borderless)
                 }
                 Spacer()
-                // wired to the settings window in Task 9
                 Button {
+                    openSettings()
                 } label: {
                     Image(systemName: "gearshape")
                 }
                 .buttonStyle(.borderless)
                 .help("Settings")
-                .disabled(true)
                 .frame(width: 20)
             }
             .frame(height: 20)

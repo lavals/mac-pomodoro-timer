@@ -10,6 +10,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificat
 
     public private(set) var coordinator: TimerCoordinator?
     private var statusItemController: StatusItemController?
+    private var settingsWindowController: SettingsWindowController?
 
     override public init() {
         super.init()
@@ -22,14 +23,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificat
             center.delegate = self
             center.requestAuthorization(options: [.alert]) { _, _ in }
         }
+        let preferences = Preferences()
         let coordinator = TimerCoordinator(
-            preferences: Preferences(),
+            preferences: preferences,
             sessionStore: SessionStore(),
             focus: FocusController(),
             alerts: SystemAlerts()
         )
         self.coordinator = coordinator
-        statusItemController = StatusItemController(coordinator: coordinator)
+        let settings = SettingsWindowController(preferences: preferences, launchAtLogin: LaunchAtLoginModel())
+        settingsWindowController = settings
+        statusItemController = StatusItemController(coordinator: coordinator) { settings.show() }
     }
 
     public func applicationWillTerminate(_ notification: Notification) {

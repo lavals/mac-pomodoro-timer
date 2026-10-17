@@ -9,14 +9,22 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
     private let coordinator: TimerCoordinator
     private let statusItem: NSStatusItem
     private let popover: NSPopover
+    private let openSettings: () -> Void
     /// Menu entries behind each item's tag, rebuilt every time the menu opens.
     private var shownItems: [MenuItem] = []
 
-    public init(coordinator: TimerCoordinator) {
+    /// - Parameter openSettings: shows the settings window (menu item and popover gear button).
+    public init(coordinator: TimerCoordinator, openSettings: @escaping () -> Void) {
         self.coordinator = coordinator
+        self.openSettings = openSettings
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        popover = Self.makePopover(coordinator: coordinator)
+        let popover = NSPopover()
+        self.popover = popover
         super.init()
+        Self.configure(popover, coordinator: coordinator) { [weak popover] in
+            popover?.performClose(nil)
+            openSettings()
+        }
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(handleClick(_:))
@@ -105,24 +113,32 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
         case .skip: coordinator.skip()
         case .reset: coordinator.reset()
         case .toggleCountdown: coordinator.toggleCountdown()
+        case .settings: openSettings()
         case .quit: NSApp.terminate(nil)
-        case .settings, .separator: break
+        case .separator: break
         }
     }
 
     /// A transient popover hosting `PopoverView`, sized by the view's own preferred size.
-    static func makePopover(coordinator: TimerCoordinator) -> NSPopover {
-        let hosting = NSHostingController(rootView: PopoverView(coordinator: coordinator))
-        hosting.sizingOptions = .preferredContentSize
+    static func makePopover(coordinator: TimerCoordinator, openSettings: @escaping () -> Void = {}) -> NSPopover {
         let popover = NSPopover()
-        popover.behavior = .transient
-        popover.animates = true
-        popover.contentViewController = hosting
+        configure(popover, coordinator: coordinator, openSettings: openSettings)
         return popover
     }
 
+    private static func configure(
+        _ popover: NSPopover,
+        coordinator: TimerCoordinator,
+        openSettings: @escaping () -> Void
+    ) {
+        let hosting = NSHostingController(rootView: PopoverView(coordinator: coordinator, openSettings: openSettings))
+        hosting.sizingOptions = .preferredContentSize
+        popover.behavior = .transient
+        popover.animates = true
+        popover.contentViewController = hosting
+    }
+
     /// Builds the right-click menu. Each item's tag is its index in `items`.
-    /// "Settings…" stays disabled until the settings window exists.
     static func makeMenu(items: [MenuItem], showCountdown: Bool, target: AnyObject?, action: Selector?) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -136,7 +152,6 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
             menuItem.tag = index
             switch item {
             case .toggleCountdown: menuItem.state = showCountdown ? .on : .off
-            case .settings: menuItem.isEnabled = false
             default: break
             }
             menu.addItem(menuItem)

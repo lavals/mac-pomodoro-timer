@@ -363,11 +363,12 @@ struct FocusController {
 - Modify: `Sources/PomodoroCore/App/AppDelegate.swift` (own the window controller)
 - Create: `Tests/PomodoroCoreTests/LaunchAtLoginModelTests.swift`
 
-- [ ] implement `LaunchAtLoginModel` per Technical Details (status mirroring, requiresApproval branch, error message, unbundled guard)
-- [ ] implement `SettingsView` (`@Bindable` preferences, two steppers 1…120, countdown toggle, launch-at-login toggle with inline message); note in code that duration changes apply to the next session
-- [ ] implement `SettingsWindowController` (reusable window, `isReleasedWhenClosed = false`, activate + front, centered) and wire the menu item and gear button
-- [ ] write tests for `LaunchAtLoginModel` with a fake `LoginService`: enabling calls `register`, disabling calls `unregister`, `.requiresApproval` yields the approval message and opens settings via an injected closure, a throwing service surfaces its message and leaves `isEnabled` unchanged
-- [ ] run `make test` and smoke-launch - must pass before task 10
+- [x] implement `LaunchAtLoginModel` per Technical Details (status mirroring, requiresApproval branch, error message, unbundled guard)
+- [x] implement `SettingsView` (`@Bindable` preferences, two steppers 1…120, countdown toggle, launch-at-login toggle with inline message); note in code that duration changes apply to the next session
+- [x] implement `SettingsWindowController` (reusable window, `isReleasedWhenClosed = false`, activate + front, centered) and wire the menu item and gear button
+- [x] write tests for `LaunchAtLoginModel` with a fake `LoginService`: enabling calls `register`, disabling calls `unregister`, `.requiresApproval` yields the approval message and opens settings via an injected closure, a throwing service surfaces its message and leaves `isEnabled` unchanged
+- [x] run `make test` and smoke-launch - must pass before task 10 (tests pass; binary launched unbundled with an idle saved session and stayed up without crashing; visual check deferred to Task 14 manual walkthrough)
+- ➕ implementation notes: `LoginService` exposes `SMAppService.Status` directly so fakes return real status values; `LaunchAtLoginModel` is `@MainActor @Observable` with `setEnabled(_:)` and `refresh()` (called each time the settings window is shown, so changes made in System Settings show up); a `register()` that throws while the status is `.requiresApproval` is treated as the approval branch, not an error; on launch with a pending approval the message shows but System Settings is not opened; `SettingsWindowController.makeWindow(title:rootView:)` is a static helper Task 10 can reuse for the Focus setup window; the popover gear button closes the popover before opening settings
 
 ### Task 10: Focus setup window and hint
 

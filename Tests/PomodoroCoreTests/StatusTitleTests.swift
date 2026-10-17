@@ -57,7 +57,7 @@ private let end = Date(timeIntervalSinceReferenceDate: 1_000_000)
         #expect(menu.items[3].isSeparatorItem)
         #expect(menu.items.enumerated().allSatisfy { index, item in item.isSeparatorItem || item.tag == index })
         #expect(menu.items[4].state == .on)
-        #expect(!menu.items[5].isEnabled)
+        #expect(menu.items[5].isEnabled)
         #expect(menu.items[0].isEnabled)
         #expect(menu.items[7].keyEquivalent == "q")
     }
