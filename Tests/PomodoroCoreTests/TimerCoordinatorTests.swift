@@ -381,6 +381,63 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.coordinator.focusAvailability == .missing(names: bothShortcuts))
     }
 
+    @Test func refreshFocusAvailabilityFindsBothShortcuts() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+
+        await h.coordinator.refreshFocusAvailability().value
+
+        #expect(h.coordinator.focusAvailability == .available)
+        #expect(h.runner.calls.map(\.args) == [["list"]])
+    }
+
+    @Test func refreshFocusAvailabilityReportsTheOneMissingName() async {
+        let h = Harness(shortcuts: [FocusController.offName, "Something Else"])
+        defer { h.cleanUp() }
+
+        await h.coordinator.refreshFocusAvailability().value
+
+        #expect(h.coordinator.focusAvailability == .missing(names: [FocusController.onName]))
+    }
+
+    @Test func refreshFocusAvailabilityReportsListErrors() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        h.runner.setHandler { _, _ in ShellResult(status: 1, stdout: "", stderr: "list failed") }
+
+        await h.coordinator.refreshFocusAvailability().value
+
+        #expect(h.coordinator.focusAvailability == .error("list failed"))
+    }
+
+    @Test func refreshFocusAvailabilityPicksUpNewlyCreatedShortcuts() async {
+        let h = Harness(shortcuts: [])
+        defer { h.cleanUp() }
+        await h.coordinator.refreshFocusAvailability().value
+        #expect(h.coordinator.focusAvailability == .missing(names: bothShortcuts))
+
+        let listing = bothShortcuts.joined(separator: "\n")
+        h.runner.setHandler { _, _ in ShellResult(status: 0, stdout: listing, stderr: "") }
+        await h.coordinator.refreshFocusAvailability().value
+
+        #expect(h.coordinator.focusAvailability == .available)
+    }
+
+    @Test func startWithMissingShortcutsRunsTheTimerWithoutShellCalls() async {
+        let h = Harness(shortcuts: [FocusController.onName])
+        defer { h.cleanUp() }
+        await h.coordinator.refreshFocusAvailability().value
+        let checks = h.runner.calls.count
+
+        h.coordinator.start()
+        await h.settle()
+
+        #expect(h.runner.calls.count == checks)
+        #expect(h.coordinator.lastFocusError == nil)
+        #expect(h.coordinator.state.isRunning)
+        #expect(h.tickers.active != nil)
+    }
+
     // MARK: termination
 
     @Test func prepareForTerminationTurnsFocusOffWhileWorkRuns() async {

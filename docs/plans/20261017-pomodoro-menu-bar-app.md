@@ -379,11 +379,14 @@ struct FocusController {
 - Modify: `Sources/PomodoroCore/Views/PopoverView.swift` (show the hint)
 - Modify: `Sources/PomodoroCore/App/AppDelegate.swift` (own the window controller)
 - Modify: `Tests/PomodoroCoreTests/TimerCoordinatorTests.swift`
+- Create: `Tests/PomodoroCoreTests/FocusSetupTests.swift`
+- Modify: `Sources/PomodoroCore/App/StatusItemController.swift` (pass the setup opener to the popover)
 
-- [ ] implement `FocusHintView` (shown for `.missing`/`.error`, "Set up…" opens the setup window)
-- [ ] implement `FocusSetupView` and `FocusSetupWindowController` per Technical Details
-- [ ] write tests that `refreshFocusAvailability()` updates `focusAvailability` from `FakeShellRunner` (available, missing one name, list error) and that `start()` with `.missing` runs the timer with no shell call and no error
-- [ ] run `make test` and smoke-launch with the shortcuts temporarily renamed to see the hint and sheet - must pass before task 11
+- [x] implement `FocusHintView` (shown for `.missing`/`.error`, "Set up…" opens the setup window)
+- [x] implement `FocusSetupView` and `FocusSetupWindowController` per Technical Details
+- [x] write tests that `refreshFocusAvailability()` updates `focusAvailability` from `FakeShellRunner` (available, missing one name, list error) and that `start()` with `.missing` runs the timer with no shell call and no error
+- [x] run `make test` and smoke-launch with the shortcuts temporarily renamed to see the hint and sheet - must pass before task 11 (tests pass; binary launched unbundled with an idle saved session and stayed up without crashing; visual check deferred to Task 14 manual walkthrough; user's shortcuts not modified)
+- ➕ implementation notes: `FocusHintView.message(for:)` is the single source for when the hint shows (`PopoverView.showsFocusHint` delegates to it) and names the shortcut when exactly one is missing; `FocusSetupView` shows a status line from `statusText(for:)` that updates live as "Check again" refreshes availability; the guide link points at `https://github.com/lavals/mac-pomodoro-timer/blob/main/docs/focus-shortcuts.md` (the doc itself is written in Task 13); the setup window reuses `SettingsWindowController.makeWindow` and re-checks availability each time it is shown; the popover closes before opening the setup window; view tests live in a new `Tests/PomodoroCoreTests/FocusSetupTests.swift`
 
 ### Task 11: App bundle build script, icon and verification
 

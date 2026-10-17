@@ -13,18 +13,32 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
     /// Menu entries behind each item's tag, rebuilt every time the menu opens.
     private var shownItems: [MenuItem] = []
 
-    /// - Parameter openSettings: shows the settings window (menu item and popover gear button).
-    public init(coordinator: TimerCoordinator, openSettings: @escaping () -> Void) {
+    /// - Parameters:
+    ///   - openSettings: shows the settings window (menu item and popover gear button).
+    ///   - openFocusSetup: shows the Focus setup window (the popover's Focus hint).
+    public init(
+        coordinator: TimerCoordinator,
+        openSettings: @escaping () -> Void,
+        openFocusSetup: @escaping () -> Void = {}
+    ) {
         self.coordinator = coordinator
         self.openSettings = openSettings
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let popover = NSPopover()
         self.popover = popover
         super.init()
-        Self.configure(popover, coordinator: coordinator) { [weak popover] in
-            popover?.performClose(nil)
-            openSettings()
-        }
+        Self.configure(
+            popover,
+            coordinator: coordinator,
+            openSettings: { [weak popover] in
+                popover?.performClose(nil)
+                openSettings()
+            },
+            openFocusSetup: { [weak popover] in
+                popover?.performClose(nil)
+                openFocusSetup()
+            }
+        )
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(handleClick(_:))
@@ -120,18 +134,27 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     /// A transient popover hosting `PopoverView`, sized by the view's own preferred size.
-    static func makePopover(coordinator: TimerCoordinator, openSettings: @escaping () -> Void = {}) -> NSPopover {
+    static func makePopover(
+        coordinator: TimerCoordinator,
+        openSettings: @escaping () -> Void = {},
+        openFocusSetup: @escaping () -> Void = {}
+    ) -> NSPopover {
         let popover = NSPopover()
-        configure(popover, coordinator: coordinator, openSettings: openSettings)
+        configure(popover, coordinator: coordinator, openSettings: openSettings, openFocusSetup: openFocusSetup)
         return popover
     }
 
     private static func configure(
         _ popover: NSPopover,
         coordinator: TimerCoordinator,
-        openSettings: @escaping () -> Void
+        openSettings: @escaping () -> Void,
+        openFocusSetup: @escaping () -> Void
     ) {
-        let hosting = NSHostingController(rootView: PopoverView(coordinator: coordinator, openSettings: openSettings))
+        let hosting = NSHostingController(rootView: PopoverView(
+            coordinator: coordinator,
+            openSettings: openSettings,
+            openFocusSetup: openFocusSetup
+        ))
         hosting.sizingOptions = .preferredContentSize
         popover.behavior = .transient
         popover.animates = true

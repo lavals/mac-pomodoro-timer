@@ -11,6 +11,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificat
     public private(set) var coordinator: TimerCoordinator?
     private var statusItemController: StatusItemController?
     private var settingsWindowController: SettingsWindowController?
+    private var focusSetupWindowController: FocusSetupWindowController?
 
     override public init() {
         super.init()
@@ -33,7 +34,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificat
         self.coordinator = coordinator
         let settings = SettingsWindowController(preferences: preferences, launchAtLogin: LaunchAtLoginModel())
         settingsWindowController = settings
-        statusItemController = StatusItemController(coordinator: coordinator) { settings.show() }
+        let focusSetup = FocusSetupWindowController(coordinator: coordinator)
+        focusSetupWindowController = focusSetup
+        statusItemController = StatusItemController(
+            coordinator: coordinator,
+            openSettings: { settings.show() },
+            openFocusSetup: { focusSetup.show() }
+        )
     }
 
     public func applicationWillTerminate(_ notification: Notification) {

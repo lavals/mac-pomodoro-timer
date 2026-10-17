@@ -5,10 +5,16 @@ import SwiftUI
 public struct PopoverView: View {
     let coordinator: TimerCoordinator
     let openSettings: () -> Void
+    let openFocusSetup: () -> Void
 
-    public init(coordinator: TimerCoordinator, openSettings: @escaping () -> Void = {}) {
+    public init(
+        coordinator: TimerCoordinator,
+        openSettings: @escaping () -> Void = {},
+        openFocusSetup: @escaping () -> Void = {}
+    ) {
         self.coordinator = coordinator
         self.openSettings = openSettings
+        self.openFocusSetup = openFocusSetup
     }
 
     public var body: some View {
@@ -61,10 +67,7 @@ public struct PopoverView: View {
             .frame(height: 20)
 
             if Self.showsFocusHint(coordinator.focusAvailability) {
-                // replaced by FocusHintView and the setup window in Task 10
-                Label("Focus shortcuts not set up", systemImage: "moon")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                FocusHintView(availability: coordinator.focusAvailability, openSetup: openFocusSetup)
             }
 
             if let error = coordinator.lastFocusError {
@@ -89,9 +92,6 @@ public struct PopoverView: View {
 
     /// The Focus hint shows only once a check found the shortcuts missing or failed.
     static func showsFocusHint(_ availability: FocusAvailability) -> Bool {
-        switch availability {
-        case .missing, .error: return true
-        case .unknown, .available: return false
-        }
+        FocusHintView.message(for: availability) != nil
     }
 }
