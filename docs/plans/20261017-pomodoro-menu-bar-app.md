@@ -272,11 +272,11 @@ struct FocusController {
 - Create: `Tests/PomodoroCoreTests/SessionStoreTests.swift`
 - Modify: `Tests/PomodoroCoreTests/TimerEngineTests.swift` (restore cases)
 
-- [ ] implement `SessionStore` (`save`, `load`, `clear`) as JSON in injected `UserDefaults`
-- [ ] implement `TimerEngine.restore(_:now:)` per Technical Details
-- [ ] write tests for save/load round-trip of every `TimerState` case and `load()` returning nil on empty or corrupt data
-- [ ] write tests for each restore branch (expired work → focusOff, expired rest → none, future work → focusOn, nil/idle/paused/finished → unchanged)
-- [ ] run `make test` - must pass before task 5
+- [x] implement `SessionStore` (`save`, `load`, `clear`) as JSON in injected `UserDefaults`
+- [x] implement `TimerEngine.restore(_:now:)` per Technical Details
+- [x] write tests for save/load round-trip of every `TimerState` case and `load()` returning nil on empty or corrupt data
+- [x] write tests for each restore branch (expired work → focusOff, expired rest → none, future work → focusOn, nil/idle/paused/finished → unchanged)
+- [x] run `make test` - must pass before task 5
 
 ### Task 5: Focus controller over the shortcuts CLI
 

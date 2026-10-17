@@ -94,6 +94,32 @@ private let transitionTable: [TransitionCase] = [
     .init(from: runningRest, call: .start, to: runningRest, effects: []),
 ]
 
+struct RestoreCase: Sendable, CustomTestStringConvertible {
+    let saved: TimerState?
+    let state: TimerState
+    let effects: [Effect]
+
+    var testDescription: String { "restore \(saved.map { "\($0)" } ?? "nil") -> \(state)" }
+}
+
+private let restoreTable: [RestoreCase] = [
+    // expired while the app was not running: finish silently, clean up Focus after work
+    .init(saved: expiredWork, state: .finished(phase: .work), effects: [.focusOff]),
+    .init(saved: expiredRest, state: .finished(phase: .rest), effects: []),
+    .init(saved: .running(phase: .work, endDate: t0.addingTimeInterval(-3600), total: 1500),
+          state: .finished(phase: .work), effects: [.focusOff]),
+    // still running: reconcile Focus for work, nothing for rest
+    .init(saved: runningWork, state: runningWork, effects: [.focusOn]),
+    .init(saved: runningRest, state: runningRest, effects: []),
+    // everything else restores as saved
+    .init(saved: nil, state: .idle, effects: []),
+    .init(saved: .idle, state: .idle, effects: []),
+    .init(saved: pausedWork, state: pausedWork, effects: []),
+    .init(saved: pausedRest, state: pausedRest, effects: []),
+    .init(saved: .finished(phase: .work), state: .finished(phase: .work), effects: []),
+    .init(saved: .finished(phase: .rest), state: .finished(phase: .rest), effects: []),
+]
+
 @Suite struct TimerEngineTests {
     @Test(arguments: transitionTable)
     func transition(_ row: TransitionCase) {
@@ -101,6 +127,18 @@ private let transitionTable: [TransitionCase] = [
         let effects = row.call.apply(to: &engine, now: t0)
         #expect(engine.state == row.to)
         #expect(effects == row.effects)
+    }
+
+    @Test(arguments: restoreTable)
+    func restore(_ row: RestoreCase) {
+        let (engine, effects) = TimerEngine.restore(row.saved, now: t0)
+        #expect(engine.state == row.state)
+        #expect(effects == row.effects)
+    }
+
+    @Test func restoredRunningWorkKeepsCountingDown() {
+        let (engine, _) = TimerEngine.restore(runningWork, now: t0)
+        #expect(engine.remaining(now: t0.addingTimeInterval(100)) == 500)
     }
 
     @Test func defaultInitIsIdle() {
