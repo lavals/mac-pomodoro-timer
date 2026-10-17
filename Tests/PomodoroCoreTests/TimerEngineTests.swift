@@ -193,6 +193,43 @@ private let restoreTable: [RestoreCase] = [
         #expect(effects.allSatisfy { $0 == .focusOff })
     }
 
+    // MARK: clock moved backwards while the app runs (now earlier than endDate - total)
+
+    @Test func pauseAfterClockMovedBackStoresAtMostTotal() {
+        var engine = TimerEngine(state: runningWork)  // ends at t0 + 600
+        let effects = engine.pause(now: t0.addingTimeInterval(-3600))
+        #expect(effects == [.focusOff])
+        #expect(engine.state == .paused(phase: .work, remaining: 1500, total: 1500))
+    }
+
+    @Test func resumeOfPausedSessionWithMoreThanTotalLeftRunsAtMostTotal() {
+        var engine = TimerEngine(state: .paused(phase: .work, remaining: 5000, total: 1500))
+        _ = engine.start(now: t0, durations: durations)
+        #expect(engine.state == .running(phase: .work, endDate: t0.addingTimeInterval(1500), total: 1500))
+    }
+
+    @Test func remainingAndProgressStayWithinThePhaseAfterClockMovedBack() {
+        let earlier = t0.addingTimeInterval(-3600)
+        let running = TimerEngine(state: runningWork)
+        #expect(running.remaining(now: earlier) == 1500)
+        #expect(running.progress(now: earlier) == 0)
+
+        let paused = TimerEngine(state: .paused(phase: .rest, remaining: 900, total: 300))
+        #expect(paused.remaining(now: t0) == 300)
+        #expect(paused.progress(now: t0) == 0)
+    }
+
+    @Test func tickAfterClockMovedBackPullsTheEndDateInToAFullPhase() {
+        var engine = TimerEngine(state: runningWork)
+        let earlier = t0.addingTimeInterval(-3600)
+        #expect(engine.tick(now: earlier) == [])
+        #expect(engine.state == .running(phase: .work, endDate: earlier.addingTimeInterval(1500), total: 1500))
+
+        // the phase then ends a full phase after the rollback, not at the original end date
+        #expect(engine.tick(now: earlier.addingTimeInterval(1500)) == workEndEffects)
+        #expect(engine.state == .finished(phase: .work))
+    }
+
     @Test func pauseAfterEndDateFinishesLikeTick() {
         var engine = TimerEngine(state: expiredWork)
         let effects = engine.pause(now: t0.addingTimeInterval(5))

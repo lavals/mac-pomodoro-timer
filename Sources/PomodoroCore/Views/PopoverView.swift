@@ -19,6 +19,8 @@ public struct PopoverView: View {
 
     public var body: some View {
         let state = coordinator.state
+        // captured at render so a click does what the button said, even if the phase ended since
+        let primary = TimerPresentation.primaryAction(for: state)
         VStack(spacing: 14) {
             ZStack {
                 ProgressRing(
@@ -36,9 +38,9 @@ public struct PopoverView: View {
             .frame(width: 160, height: 160)
 
             Button {
-                coordinator.performPrimaryAction()
+                coordinator.perform(.primary(primary))
             } label: {
-                Text(TimerPresentation.primaryAction(for: state).title)
+                Text(primary.title)
                     .frame(minWidth: 110)
             }
             .buttonStyle(.borderedProminent)

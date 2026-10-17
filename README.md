@@ -9,7 +9,7 @@ A small, native macOS menu bar pomodoro timer. Set your work and rest lengths, s
 - Configurable work and rest durations (1 to 120 minutes each; 25 and 5 by default)
 - Countdown in the menu bar, or a compact glyph with a progress arc when you hide it
 - A popover with a progress ring, one main button (Start Focus, Start Break, Pause or Resume) and a Skip button while a phase runs or is paused, or Reset once it finished
-- Turns a Focus on while a work session runs and off when it ends, is paused, skipped or reset, or when you quit Pomodoro mid-session; resuming a paused work session turns it back on
+- Turns a Focus on while a work session runs and off when it ends, is paused, skipped or reset, or when you quit Pomodoro mid-session; resuming a paused work session turns it back on. Pomodoro cannot tell whether that Focus was already on before the session, so a Focus you had switched on yourself is turned off with it
 - Survives a relaunch: reopening Pomodoro during a work session resumes the countdown and turns Focus back on
 - Plays a chime and posts a notification at the end of each phase, then waits for you to start the next one
 - Right-click (or Control-click) menu with the main action, Skip and Reset, the countdown toggle, Settings and Quit

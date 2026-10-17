@@ -173,15 +173,15 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.focusRuns == [focusOn, focusOff, focusOn])
     }
 
-    @Test func performPrimaryActionTogglesBetweenStartAndPause() async {
+    @Test func performingTheShownPrimaryActionTogglesBetweenStartAndPause() async {
         let h = Harness(shortcuts: [])
         defer { h.cleanUp() }
 
-        h.coordinator.performPrimaryAction()
+        h.coordinator.perform(.primary(h.primaryAction))
         #expect(h.primaryAction == .pause)
-        h.coordinator.performPrimaryAction()
+        h.coordinator.perform(.primary(h.primaryAction))
         #expect(h.primaryAction == .resume)
-        h.coordinator.performPrimaryAction()
+        h.coordinator.perform(.primary(h.primaryAction))
         #expect(h.primaryAction == .pause)
         await h.settle()
     }
@@ -783,11 +783,35 @@ private let focusOff = ["run", FocusController.offName]
         let shown = TimerPresentation.menuItems(for: h.coordinator.state)
         #expect(shown.first == .primary(.startFocus))
 
-        h.coordinator.performPrimaryAction()
+        h.coordinator.perform(.primary(h.primaryAction))
         h.coordinator.perform(shown[0])
         await h.settle()
 
         #expect(h.coordinator.state.isRunning)
+    }
+
+    /// The popover stays rendered while the timer ticks and captures its actions at render
+    /// time: a `Pause` clicked after the phase finished must not start the break (or turn Focus
+    /// on again), and a `Skip` clicked then must not change anything either.
+    @Test func popoverActionsClickedAfterThePhaseFinishedDoNothing() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        h.coordinator.start()
+        let primary = TimerPresentation.primaryAction(for: h.coordinator.state)
+        let secondary = TimerPresentation.secondaryAction(for: h.coordinator.state)
+        #expect(primary == .pause)
+        #expect(secondary == .skip)
+
+        h.clock.advance(1500)
+        h.tickers.active?.fire()
+        #expect(h.coordinator.state == .finished(phase: .work))
+        h.coordinator.perform(.primary(primary))
+        if let secondary { h.coordinator.perform(secondary) }
+        await h.settle()
+
+        #expect(h.coordinator.state == .finished(phase: .work))
+        #expect(h.store.load() == .finished(phase: .work))
+        #expect(h.focusRuns == [focusOn, focusOff])
     }
 
     // MARK: termination

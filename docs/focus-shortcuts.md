@@ -1,6 +1,6 @@
 # Focus shortcuts
 
-Pomodoro turns a macOS Focus on when a work session starts or a paused one resumes, and off when it ends, is paused, skipped or reset, or when you quit Pomodoro mid-session. If Pomodoro is reopened during a work session, the countdown resumes and Focus turns back on. Pomodoro only turns off a Focus it turned on itself, so a Focus you switched on by hand is left alone. It does this by running two shortcuts from the Shortcuts app. You create them once; the names must match exactly:
+Pomodoro turns a macOS Focus on when a work session starts or a paused one resumes, and off when it ends, is paused, skipped or reset, or when you quit Pomodoro mid-session. If Pomodoro is reopened during a work session, the countdown resumes and Focus turns back on. Pomodoro only runs Focus Off after it ran Focus On for a work session, so a Focus you switch on by hand while no work session runs is left alone. macOS gives apps no way to read which Focus is on, though: if the Focus was already on when a work session started, Pomodoro's Focus Off at the end of that session turns it off too. It does this by running two shortcuts from the Shortcuts app. You create them once; the names must match exactly:
 
 - `Pomodoro Focus On`
 - `Pomodoro Focus Off`

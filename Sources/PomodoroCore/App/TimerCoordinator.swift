@@ -12,7 +12,9 @@ import Observation
 /// Focus On runs only when both shortcuts exist (re-checked whenever the last check did not
 /// find them). Focus Off runs only when the app turned Focus on itself
 /// (`SessionStore.focusTurnedOn`), whatever the last availability check said, so a failed check
-/// mid-session never leaves Focus on and a Focus the user turned on stays alone.
+/// mid-session never leaves Focus on. A Focus the user turns on while no work phase runs stays
+/// alone; one that was already on when work started is turned off with the app's own (the
+/// current Focus state cannot be read, so the app cannot tell the two apart).
 @MainActor
 @Observable
 public final class TimerCoordinator {
@@ -128,12 +130,6 @@ public final class TimerCoordinator {
         mutate { $0.tick(now: $1) }
     }
 
-    /// Performs the primary action the current state shows (pause while running, otherwise
-    /// start or resume).
-    public func performPrimaryAction() {
-        perform(.primary(TimerPresentation.primaryAction(for: state)))
-    }
-
     public func toggleCountdown() {
         preferences.showCountdown.toggle()
     }
@@ -141,9 +137,10 @@ public final class TimerCoordinator {
     /// Performs a timer menu entry or popover button. `.settings`, `.quit` and `.separator` are
     /// app-level entries the caller handles, so they do nothing here.
     ///
-    /// A primary entry does what its title said when it was shown, even if the state changed
-    /// since (a menu stays open while the timer ticks): `Pause` on a phase that already finished
-    /// does nothing instead of starting the next one.
+    /// Callers pass the item they showed, not one derived again at click time: a primary entry
+    /// does what its title said when it was shown, even if the state changed since (a menu stays
+    /// open and a popover stays rendered while the timer ticks): `Pause` on a phase that already
+    /// finished does nothing instead of starting the next one.
     public func perform(_ item: MenuItem) {
         switch item {
         case .primary(.startFocus), .primary(.startBreak), .primary(.resume): start()
