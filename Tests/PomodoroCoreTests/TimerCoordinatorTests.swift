@@ -4,7 +4,6 @@ import Observation
 import Testing
 @testable import PomodoroCore
 
-private let t0 = Date(timeIntervalSinceReferenceDate: 1_000_000)
 private let bothShortcuts = [FocusController.onName, FocusController.offName]
 
 /// Manually advanced clock.
@@ -42,17 +41,12 @@ struct Harness {
         savedData: Data? = nil,
         focusWasOn: Bool = false
     ) {
-        let log = log
-        runner = FakeShellRunner { _, args in
-            log.append("shell \(args.joined(separator: " "))")
-            let stdout = args == ["list"] ? shortcuts.joined(separator: "\n") + "\n" : ""
-            return ShellResult(status: 0, stdout: stdout, stderr: "")
-        }
+        runner = FakeShellRunner.listing(shortcuts, log: log)
         alerts = FakeAlerts(log: log)
         preferences = Preferences(defaults: testDefaults.defaults)
         store = SessionStore(defaults: testDefaults.defaults)
         if let saved { store.save(saved) }
-        if let savedData { testDefaults.defaults.set(savedData, forKey: SessionStore.key) }
+        if let savedData { testDefaults.defaults.set(savedData, forKey: SessionStore.Key.state) }
         store.focusTurnedOn = focusWasOn
         let clock = clock
         coordinator = TimerCoordinator(
@@ -513,7 +507,7 @@ private let focusOff = ["run", FocusController.offName]
 
         h.coordinator.start()
         await h.settle()
-        #expect(h.coordinator.lastFocusError == "Focus shortcut failed: Focus not allowed")
+        #expect(h.coordinator.lastFocusError == "Couldn't run the Focus shortcut: Focus not allowed")
         #expect(h.coordinator.state.isRunning)
         #expect(h.tickers.active != nil)
 
@@ -537,7 +531,7 @@ private let focusOff = ["run", FocusController.offName]
         h.coordinator.start()
         await h.settle()
 
-        #expect(h.coordinator.lastFocusError == "Focus shortcut timed out")
+        #expect(h.coordinator.lastFocusError == "Couldn't run the Focus shortcut: timed out")
         #expect(h.coordinator.state.isRunning)
     }
 
@@ -577,7 +571,7 @@ private let focusOff = ["run", FocusController.offName]
 
         await h.coordinator.refreshFocusAvailability().value
 
-        #expect(h.coordinator.focusAvailability == .error("list failed"))
+        #expect(h.coordinator.focusAvailability == .error(.failed(status: 1, stderr: "list failed")))
     }
 
     @Test func refreshFocusAvailabilityPicksUpNewlyCreatedShortcuts() async {
@@ -622,7 +616,7 @@ private let focusOff = ["run", FocusController.offName]
             return ShellResult(status: 0, stdout: "", stderr: "")
         }
         await h.coordinator.refreshFocusAvailability().value
-        #expect(h.coordinator.focusAvailability == .error("shortcuts list timed out"))
+        #expect(h.coordinator.focusAvailability == .error(.timeout))
 
         h.coordinator.pause()
         await h.settle()
@@ -644,7 +638,7 @@ private let focusOff = ["run", FocusController.offName]
         let listing = bothShortcuts.joined(separator: "\n")
         h.runner.setHandler { _, _ in throw ShellError.timeout }
         await h.coordinator.refreshFocusAvailability().value
-        #expect(h.coordinator.focusAvailability == .error("shortcuts list timed out"))
+        #expect(h.coordinator.focusAvailability == .error(.timeout))
 
         h.runner.setHandler { _, args in
             ShellResult(status: 0, stdout: args == ["list"] ? listing : "", stderr: "")
@@ -704,7 +698,7 @@ private let focusOff = ["run", FocusController.offName]
         h.coordinator.pause()
         await h.settle()
         #expect(h.focusRuns == [focusOn, focusOff, focusOff])
-        #expect(h.coordinator.lastFocusError == "Focus shortcut failed: busy")
+        #expect(h.coordinator.lastFocusError == "Couldn't run the Focus shortcut: busy")
         #expect(h.store.focusTurnedOn)
 
         h.runner.setHandler { _, _ in ShellResult(status: 0, stdout: "", stderr: "") }
@@ -763,6 +757,39 @@ private let focusOff = ["run", FocusController.offName]
         await h.settle()
     }
 
+    /// The menu is built when it opens and the timer keeps ticking while it is open: a `Pause`
+    /// chosen after the phase finished must not start the next one.
+    @Test func menuPauseChosenAfterThePhaseFinishedStartsNothing() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        h.coordinator.start()
+        let shown = TimerPresentation.menuItems(for: h.coordinator.state)
+        #expect(shown.first == .primary(.pause))
+
+        h.clock.advance(1500)
+        h.tickers.active?.fire()
+        #expect(h.coordinator.state == .finished(phase: .work))
+        h.coordinator.perform(shown[0])
+        await h.settle()
+
+        #expect(h.coordinator.state == .finished(phase: .work))
+        #expect(h.focusRuns == [focusOn, focusOff])
+    }
+
+    /// A `Start Focus` chosen after the popover already started the phase must not pause it.
+    @Test func menuStartChosenAfterThePhaseStartedKeepsItRunning() async {
+        let h = Harness(shortcuts: [])
+        defer { h.cleanUp() }
+        let shown = TimerPresentation.menuItems(for: h.coordinator.state)
+        #expect(shown.first == .primary(.startFocus))
+
+        h.coordinator.performPrimaryAction()
+        h.coordinator.perform(shown[0])
+        await h.settle()
+
+        #expect(h.coordinator.state.isRunning)
+    }
+
     // MARK: termination
 
     @Test func prepareForTerminationTurnsFocusOffWhileWorkRuns() async {
@@ -774,7 +801,7 @@ private let focusOff = ["run", FocusController.offName]
         await h.coordinator.prepareForTermination()
 
         #expect(h.focusRuns == [focusOn, focusOff])
-        #expect(h.runner.calls.last?.timeout == 2)
+        #expect(h.runner.calls.last?.timeout == .seconds(2))
         #expect(h.store.focusTurnedOn == false)
     }
 
@@ -898,104 +925,9 @@ private let focusOff = ["run", FocusController.offName]
     }
 }
 
-/// Thread-safe call counter for scripted shell handlers.
-final class Counter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value = 0
-
-    /// Increments and returns the new value.
-    func increment() -> Int {
-        lock.withLock {
-            value += 1
-            return value
-        }
-    }
-}
-
 private extension TimerState {
     var isRunning: Bool {
         if case .running = self { return true }
         return false
-    }
-}
-
-/// The real one-second ticker. Runs the main run loop by hand, so it must stay on the main actor.
-@MainActor
-@Suite(.serialized) struct SystemTickerTests {
-    /// The status item's menu runs the main run loop in event-tracking mode; a timer scheduled
-    /// only in the default mode would freeze the countdown while the menu is open.
-    @Test func keepsFiringWhileAMenuIsTracking() {
-        var fires = 0
-        let ticker = SystemTicker { fires += 1 }
-        defer { ticker.invalidate() }
-
-        let deadline = Date().addingTimeInterval(5)
-        while fires < 2, Date() < deadline {
-            RunLoop.main.run(mode: .eventTracking, before: Date().addingTimeInterval(0.1))
-        }
-
-        #expect(fires >= 2)
-    }
-
-    @Test func stopsFiringOnceInvalidated() {
-        var fires = 0
-        var controlFires = 0
-        let ticker = SystemTicker { fires += 1 }
-        // proves the run loop below does fire tickers that are not invalidated
-        let control = SystemTicker { controlFires += 1 }
-        defer { control.invalidate() }
-
-        ticker.invalidate()
-        let deadline = Date().addingTimeInterval(1.6)
-        while Date() < deadline {
-            RunLoop.main.run(mode: .default, before: min(deadline, Date().addingTimeInterval(0.1)))
-        }
-
-        #expect(controlFires >= 1)
-        #expect(fires == 0)
-    }
-}
-
-/// The status item's button rendering, on a plain `NSButton` instead of a real status item.
-@MainActor
-@Suite struct StatusButtonRendererTests {
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<200 where !condition() {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-    }
-
-    @Test func followsConsecutiveTicksAndTheCountdownToggle() async throws {
-        let h = Harness(shortcuts: [])
-        defer { h.cleanUp() }
-        let button = NSButton()
-        let renderer = StatusButtonRenderer(button: button, coordinator: h.coordinator)
-        renderer.start()
-        #expect(button.attributedTitle.string == "25:00")
-        #expect(button.imagePosition == .imageLeading)
-        #expect(button.image != nil)
-
-        h.coordinator.start()
-        h.clock.advance(1)
-        h.coordinator.tick()
-        try await waitUntil { button.attributedTitle.string == "24:59" }
-        #expect(button.attributedTitle.string == "24:59")
-
-        // a second change must still be observed: tracking re-registers after each one
-        h.clock.advance(1)
-        h.coordinator.tick()
-        try await waitUntil { button.attributedTitle.string == "24:58" }
-        #expect(button.attributedTitle.string == "24:58")
-
-        h.coordinator.toggleCountdown()
-        try await waitUntil { button.imagePosition == .imageOnly }
-        #expect(button.imagePosition == .imageOnly)
-        #expect(button.attributedTitle.string.isEmpty)
-
-        h.coordinator.toggleCountdown()
-        try await waitUntil { button.imagePosition == .imageLeading }
-        #expect(button.imagePosition == .imageLeading)
-        #expect(button.attributedTitle.string == "24:58")
-        await h.settle()
     }
 }

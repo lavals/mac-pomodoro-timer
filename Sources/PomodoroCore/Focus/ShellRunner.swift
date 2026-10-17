@@ -23,7 +23,7 @@ public enum ShellError: Error, Equatable, Sendable {
 
 /// Runs an external command. A protocol so tests can replace the real process with a fake.
 public protocol ShellRunner: Sendable {
-    func run(_ executable: String, _ args: [String], timeout: TimeInterval) async throws -> ShellResult
+    func run(_ executable: String, _ args: [String], timeout: Duration) async throws -> ShellResult
 }
 
 /// Runs commands with `Foundation.Process`.
@@ -34,7 +34,7 @@ public protocol ShellRunner: Sendable {
 public struct ProcessShellRunner: ShellRunner {
     public init() {}
 
-    public func run(_ executable: String, _ args: [String], timeout: TimeInterval) async throws -> ShellResult {
+    public func run(_ executable: String, _ args: [String], timeout: Duration) async throws -> ShellResult {
         try await withCheckedThrowingContinuation { continuation in
             let context = RunContext(continuation: continuation)
             let process = Process()
@@ -81,7 +81,7 @@ public struct ProcessShellRunner: ShellRunner {
                 readers.leave()
             }
 
-            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout / .seconds(1)) {
                 guard context.finish(.failure(ShellError.timeout)) else { return }
                 if process.isRunning { process.terminate() }
             }
@@ -105,10 +105,10 @@ private final class RunContext: @unchecked Sendable {
     /// Resumes the continuation if nobody has yet; returns whether this call did it.
     @discardableResult
     func finish(_ result: Result<ShellResult, Error>) -> Bool {
-        lock.lock()
-        let pending = continuation
-        continuation = nil
-        lock.unlock()
+        let pending = lock.withLock {
+            defer { continuation = nil }
+            return continuation
+        }
         guard let pending else { return false }
         pending.resume(with: result)
         return true

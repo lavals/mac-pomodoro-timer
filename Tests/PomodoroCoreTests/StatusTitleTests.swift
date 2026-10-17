@@ -3,8 +3,6 @@ import Foundation
 import Testing
 @testable import PomodoroCore
 
-private let end = Date(timeIntervalSinceReferenceDate: 1_000_000)
-
 @Suite struct StatusTitleTests {
     @Test func hiddenIsEmpty() {
         #expect(StatusTitle.make(time: "25:00", tint: .controlAccentColor, showCountdown: false).length == 0)
@@ -30,7 +28,7 @@ private let end = Date(timeIntervalSinceReferenceDate: 1_000_000)
 
     @Test(arguments: [
         (TimerState.idle, NSColor.secondaryLabelColor),
-        (.running(phase: .work, endDate: end, total: 1500), .controlAccentColor),
+        (.running(phase: .work, endDate: t0, total: 1500), .controlAccentColor),
         (.paused(phase: .rest, remaining: 10, total: 300), .systemGreen),
         (.finished(phase: .work), .secondaryLabelColor),
     ])
@@ -38,36 +36,5 @@ private let end = Date(timeIntervalSinceReferenceDate: 1_000_000)
         let title = StatusTitle.make(time: "05:00", tint: TimerPresentation.tint(for: state), showCountdown: true)
         let color = try #require(title.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor)
         #expect(color == expected)
-    }
-}
-
-@MainActor
-@Suite struct StatusMenuTests {
-    @Test func buildsMenuFromPresentationItems() {
-        let items = TimerPresentation.menuItems(for: .running(phase: .work, endDate: end, total: 1500))
-        let menu = StatusItemController.makeMenu(items: items, showCountdown: true, target: nil, action: nil)
-        #expect(menu.items.map(\.title) == ["Pause", "Skip", "Reset", "", "Show Countdown in Menu Bar",
-                                            "Settings…", "", "Quit Pomodoro"])
-        #expect(menu.items[3].isSeparatorItem)
-        #expect(menu.items.enumerated().allSatisfy { index, item in item.isSeparatorItem || item.tag == index })
-        #expect(menu.items[4].state == .on)
-        #expect(menu.items[5].isEnabled)
-        #expect(menu.items[0].isEnabled)
-        #expect(menu.items[7].keyEquivalent == "q")
-    }
-
-    @Test func countdownItemUncheckedWhenHidden() {
-        let menu = StatusItemController.makeMenu(
-            items: TimerPresentation.menuItems(for: .idle), showCountdown: false, target: nil, action: nil
-        )
-        #expect(menu.items.map(\.title).first == "Start Focus")
-        #expect(menu.items.first { $0.title == "Show Countdown in Menu Bar" }?.state == .off)
-    }
-
-    @Test func rightClickOrControlClickOpensTheMenu() {
-        #expect(StatusItemController.wantsMenu(eventType: .rightMouseUp, modifierFlags: []))
-        #expect(StatusItemController.wantsMenu(eventType: .leftMouseUp, modifierFlags: [.control]))
-        #expect(!StatusItemController.wantsMenu(eventType: .leftMouseUp, modifierFlags: []))
-        #expect(!StatusItemController.wantsMenu(eventType: .leftMouseUp, modifierFlags: [.option]))
     }
 }

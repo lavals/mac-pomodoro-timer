@@ -2,46 +2,6 @@ import AppKit
 import Foundation
 import Observation
 
-/// A repeating one-second tick source. Invalidated when the timer stops running.
-@MainActor
-public protocol Ticker: AnyObject {
-    func invalidate()
-}
-
-/// Creates a started `Ticker` that calls `fire` every second until invalidated.
-public typealias TickerFactory = @MainActor (_ fire: @escaping @MainActor () -> Void) -> Ticker
-
-/// `Foundation.Timer` on the main run loop in `.common` mode, so it keeps firing while the
-/// status item's menu is open. Holds a user-initiated activity so App Nap does not delay the chime.
-@MainActor
-public final class SystemTicker: Ticker {
-    private var timer: Timer?
-    private var activity: NSObjectProtocol?
-
-    public init(fire: @escaping @MainActor () -> Void) {
-        activity = ProcessInfo.processInfo.beginActivity(
-            options: .userInitiatedAllowingIdleSystemSleep,
-            reason: "Pomodoro timer running"
-        )
-        let timer = Timer(timeInterval: 1, repeats: true) { _ in
-            // scheduled on RunLoop.main, so the block always runs on the main thread
-            MainActor.assumeIsolated { fire() }
-        }
-        timer.tolerance = 0.1
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
-    }
-
-    public func invalidate() {
-        timer?.invalidate()
-        timer = nil
-        if let activity {
-            ProcessInfo.processInfo.endActivity(activity)
-            self.activity = nil
-        }
-    }
-}
-
 /// Owns the timer engine and performs its effects: chimes, Focus shortcuts and notifications.
 ///
 /// Every mutating call saves the engine state first, then performs the returned effects.
@@ -58,8 +18,8 @@ public final class SystemTicker: Ticker {
 public final class TimerCoordinator {
     /// Clock reading of the last tick or action. Stored so observers see a change every second
     /// even when the engine state does not change.
-    public private(set) var now: Date
-    public private(set) var engine: TimerEngine
+    private var now: Date
+    private var engine: TimerEngine
     /// Whether both Focus shortcuts exist. `.unknown` until the first check.
     public private(set) var focusAvailability: FocusAvailability = .unknown
     /// Message of the last failed Focus call; cleared by the next successful one.
@@ -168,9 +128,10 @@ public final class TimerCoordinator {
         mutate { $0.tick(now: $1) }
     }
 
-    /// Pauses while running, otherwise starts or resumes.
+    /// Performs the primary action the current state shows (pause while running, otherwise
+    /// start or resume).
     public func performPrimaryAction() {
-        if case .running = engine.state { pause() } else { start() }
+        perform(.primary(TimerPresentation.primaryAction(for: state)))
     }
 
     public func toggleCountdown() {
@@ -179,9 +140,14 @@ public final class TimerCoordinator {
 
     /// Performs a timer menu entry or popover button. `.settings`, `.quit` and `.separator` are
     /// app-level entries the caller handles, so they do nothing here.
+    ///
+    /// A primary entry does what its title said when it was shown, even if the state changed
+    /// since (a menu stays open while the timer ticks): `Pause` on a phase that already finished
+    /// does nothing instead of starting the next one.
     public func perform(_ item: MenuItem) {
         switch item {
-        case .primary: performPrimaryAction()
+        case .primary(.startFocus), .primary(.startBreak), .primary(.resume): start()
+        case .primary(.pause): pause()
         case .skip: skip()
         case .reset: reset()
         case .toggleCountdown: toggleCountdown()
@@ -216,7 +182,7 @@ public final class TimerCoordinator {
         guard sessionStore.focusTurnedOn else { return }
         let focus = self.focus
         let off = Task.detached {
-            await focus.setFocus(false, timeout: offBudget / .seconds(1))
+            await focus.setFocus(false, timeout: offBudget)
         }
         if case .success = await Self.value(of: off, within: offBudget), chainFinished {
             sessionStore.focusTurnedOn = false
@@ -277,15 +243,11 @@ public final class TimerCoordinator {
 
     private func performQueued(_ effect: Effect) async {
         switch effect {
-        case .focusOn: await setFocus(true)
-        case .focusOff: await setFocus(false)
+        case .focusOn: await turnFocusOn()
+        case .focusOff: await turnFocusOff()
         case .postNotification(let title, let body): alerts.postNotification(title: title, body: body)
         case .playChime: break
         }
-    }
-
-    private func setFocus(_ on: Bool) async {
-        if on { await turnFocusOn() } else { await turnFocusOff() }
     }
 
     /// Runs Focus On when both shortcuts exist, re-checking unless the last check found them.

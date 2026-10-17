@@ -38,7 +38,7 @@ public struct FocusHintView: View {
         case .missing:
             return "Focus shortcuts not set up"
         case .error:
-            return "Couldn't check Focus shortcuts"
+            return TimerPresentation.focusCheckFailed
         }
     }
 }

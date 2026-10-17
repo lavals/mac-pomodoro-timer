@@ -13,6 +13,8 @@ public struct FocusSetupView: View {
     }
 
     public var body: some View {
+        let availability = coordinator.focusAvailability
+        let found = availability == .available
         VStack(alignment: .leading, spacing: 14) {
             Text("Pomodoro turns on a Focus while you work by running two shortcuts. Create them once in the Shortcuts app:")
                 .fixedSize(horizontal: false, vertical: true)
@@ -40,9 +42,9 @@ public struct FocusSetupView: View {
             Divider()
 
             HStack(spacing: 8) {
-                Image(systemName: coordinator.focusAvailability == .available ? "checkmark.circle.fill" : "moon")
-                    .foregroundStyle(coordinator.focusAvailability == .available ? Color.green : Color.secondary)
-                Text(Self.statusText(for: coordinator.focusAvailability))
+                Image(systemName: found ? "checkmark.circle.fill" : "moon")
+                    .foregroundStyle(found ? Color.green : Color.secondary)
+                Text(Self.statusText(for: availability))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -82,8 +84,8 @@ public struct FocusSetupView: View {
             return "Both shortcuts found. Focus turns on during work sessions."
         case .missing(let names):
             return "Missing: " + names.map { "“\($0)”" }.joined(separator: ", ")
-        case .error(let message):
-            return "Couldn't check shortcuts: \(message)"
+        case .error(let error):
+            return TimerPresentation.focusCheckErrorMessage(error)
         }
     }
 }

@@ -5,16 +5,17 @@ public enum FocusAvailability: Equatable, Sendable {
     case unknown
     case available
     case missing(names: [String])
-    case error(String)
+    /// `shortcuts list` failed, so it is unknown whether the shortcuts exist.
+    case error(FocusError)
 }
 
-/// Why turning Focus on or off failed.
+/// Why a `shortcuts` call (listing the shortcuts, or turning Focus on or off) failed.
 public enum FocusError: Error, Equatable, Sendable {
     /// The `shortcuts` command line tool could not be started; carries the launch error.
     case launchFailed(String)
-    /// The shortcut ran but exited with a non-zero status.
+    /// The command ran but exited with a non-zero status; carries its trimmed stderr.
     case failed(status: Int32, stderr: String)
-    /// The shortcut did not finish in time and was terminated.
+    /// The command did not finish in time and was terminated.
     case timeout
 }
 
@@ -23,7 +24,7 @@ public struct FocusController: Sendable {
     public static let onName = "Pomodoro Focus On"
     public static let offName = "Pomodoro Focus Off"
     static let executable = "/usr/bin/shortcuts"
-    public static let defaultTimeout: TimeInterval = 5
+    public static let defaultTimeout: Duration = .seconds(5)
 
     private let runner: ShellRunner
 
@@ -34,19 +35,9 @@ public struct FocusController: Sendable {
     /// Checks `shortcuts list` for both shortcut names (each line trimmed, exact match).
     public func availability() async -> FocusAvailability {
         let result: ShellResult
-        do {
-            result = try await runner.run(Self.executable, ["list"], timeout: Self.defaultTimeout)
-        } catch ShellError.timeout {
-            return .error("shortcuts list timed out")
-        } catch ShellError.launchFailed(let message) {
-            return .error("shortcuts could not be started: \(message)")
-        } catch {
-            return .error(error.localizedDescription)
-        }
-
-        guard result.status == 0 else {
-            let detail = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            return .error(detail.isEmpty ? "shortcuts list exited with status \(result.status)" : detail)
+        switch await run(["list"], timeout: Self.defaultTimeout) {
+        case .success(let output): result = output
+        case .failure(let error): return .error(error)
         }
 
         let installed = Set(result.stdout
@@ -57,23 +48,32 @@ public struct FocusController: Sendable {
     }
 
     /// Runs the On or Off shortcut. Never throws: every failure comes back as a `FocusError`.
-    public func setFocus(_ on: Bool, timeout: TimeInterval = defaultTimeout) async -> Result<Void, FocusError> {
-        let name = on ? Self.onName : Self.offName
+    public func setFocus(_ on: Bool, timeout: Duration = defaultTimeout) async -> Result<Void, FocusError> {
+        await run(["run", on ? Self.onName : Self.offName], timeout: timeout).map { _ in () }
+    }
+
+    /// Runs `shortcuts` with `args`; a launch failure, timeout or non-zero exit becomes a `FocusError`.
+    private func run(_ args: [String], timeout: Duration) async -> Result<ShellResult, FocusError> {
+        let result: ShellResult
         do {
-            let result = try await runner.run(Self.executable, ["run", name], timeout: timeout)
-            guard result.status == 0 else {
-                return .failure(.failed(
-                    status: result.status,
-                    stderr: result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                ))
-            }
-            return .success(())
-        } catch ShellError.timeout {
-            return .failure(.timeout)
-        } catch ShellError.launchFailed(let message) {
-            return .failure(.launchFailed(message))
+            result = try await runner.run(Self.executable, args, timeout: timeout)
         } catch {
-            return .failure(.launchFailed(error.localizedDescription))
+            return .failure(Self.mapShellError(error))
+        }
+        guard result.status == 0 else {
+            return .failure(.failed(
+                status: result.status,
+                stderr: result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            ))
+        }
+        return .success(result)
+    }
+
+    private static func mapShellError(_ error: Error) -> FocusError {
+        switch error {
+        case ShellError.timeout: return .timeout
+        case ShellError.launchFailed(let message): return .launchFailed(message)
+        default: return .launchFailed(error.localizedDescription)
         }
     }
 }

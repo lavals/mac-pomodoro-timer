@@ -138,9 +138,8 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
             let menuItem = NSMenuItem(title: item.title, action: action, keyEquivalent: item == .quit ? "q" : "")
             menuItem.target = target
             menuItem.tag = index
-            switch item {
-            case .toggleCountdown: menuItem.state = showCountdown ? .on : .off
-            default: break
+            if item == .toggleCountdown {
+                menuItem.state = showCountdown ? .on : .off
             }
             menu.addItem(menuItem)
         }

@@ -19,7 +19,7 @@ public final class Preferences {
 
     @ObservationIgnored private let defaults: UserDefaults
 
-    /// Length of a work session in minutes, clamped to 1...120.
+    /// Length of a work session in minutes, clamped to `minuteRange`.
     public var workMinutes: Int {
         didSet {
             let clamped = Self.clamp(workMinutes)
@@ -28,7 +28,7 @@ public final class Preferences {
         }
     }
 
-    /// Length of a rest session in minutes, clamped to 1...120.
+    /// Length of a rest session in minutes, clamped to `minuteRange`.
     public var restMinutes: Int {
         didSet {
             let clamped = Self.clamp(restMinutes)

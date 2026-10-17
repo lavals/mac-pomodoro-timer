@@ -9,7 +9,7 @@ import Testing
         let runner = FakeShellRunner.listing(["Morning", FocusController.onName, FocusController.offName])
 
         #expect(await FocusController(runner: runner).availability() == .available)
-        #expect(runner.calls == [.init(executable: "/usr/bin/shortcuts", args: ["list"], timeout: 5)])
+        #expect(runner.calls == [.init(executable: "/usr/bin/shortcuts", args: ["list"], timeout: .seconds(5))])
     }
 
     @Test func namesAreTrimmedBeforeMatching() async {
@@ -43,27 +43,25 @@ import Testing
     @Test func listNonZeroExitIsErrorWithStderr() async {
         let runner = FakeShellRunner { _, _ in ShellResult(status: 1, stdout: "", stderr: "boom\n") }
 
-        #expect(await FocusController(runner: runner).availability() == .error("boom"))
+        #expect(await FocusController(runner: runner).availability() == .error(.failed(status: 1, stderr: "boom")))
     }
 
-    @Test func listNonZeroExitWithoutStderrMentionsStatus() async {
+    @Test func listNonZeroExitWithoutStderrKeepsTheStatus() async {
         let runner = FakeShellRunner { _, _ in ShellResult(status: 3, stdout: "", stderr: "") }
 
-        #expect(await FocusController(runner: runner).availability()
-            == .error("shortcuts list exited with status 3"))
+        #expect(await FocusController(runner: runner).availability() == .error(.failed(status: 3, stderr: "")))
     }
 
     @Test func listTimeoutIsError() async {
         let runner = FakeShellRunner { _, _ in throw ShellError.timeout }
 
-        #expect(await FocusController(runner: runner).availability() == .error("shortcuts list timed out"))
+        #expect(await FocusController(runner: runner).availability() == .error(.timeout))
     }
 
     @Test func listLaunchFailureIsError() async {
         let runner = FakeShellRunner { _, _ in throw ShellError.launchFailed("no such file") }
 
-        #expect(await FocusController(runner: runner).availability()
-            == .error("shortcuts could not be started: no such file"))
+        #expect(await FocusController(runner: runner).availability() == .error(.launchFailed("no such file")))
     }
 
     // MARK: setFocus
@@ -75,15 +73,15 @@ import Testing
         let result = await FocusController(runner: runner).setFocus(on)
 
         #expect((try? result.get()) != nil)
-        #expect(runner.calls == [.init(executable: "/usr/bin/shortcuts", args: ["run", name], timeout: 5)])
+        #expect(runner.calls == [.init(executable: "/usr/bin/shortcuts", args: ["run", name], timeout: .seconds(5))])
     }
 
     @Test func setFocusPassesCustomTimeout() async {
         let runner = FakeShellRunner()
 
-        _ = await FocusController(runner: runner).setFocus(false, timeout: 2)
+        _ = await FocusController(runner: runner).setFocus(false, timeout: .seconds(2))
 
-        #expect(runner.calls.map(\.timeout) == [2])
+        #expect(runner.calls.map(\.timeout) == [.seconds(2)])
     }
 
     @Test func setFocusNonZeroExitCapturesStatusAndStderr() async {

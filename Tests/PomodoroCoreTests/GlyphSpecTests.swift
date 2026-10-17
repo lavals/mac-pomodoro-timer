@@ -2,8 +2,6 @@ import Foundation
 import Testing
 @testable import PomodoroCore
 
-private let end = Date(timeIntervalSinceReferenceDate: 1_000_000)
-
 struct GlyphCase: Sendable, CustomTestStringConvertible {
     let state: TimerState
     let progress: Double
@@ -15,9 +13,9 @@ struct GlyphCase: Sendable, CustomTestStringConvertible {
 private let glyphTable: [GlyphCase] = [
     .init(state: .idle, progress: 0, expected: .init(style: .dimmed, arc: 0)),
     .init(state: .idle, progress: 0.7, expected: .init(style: .dimmed, arc: 0)),
-    .init(state: .running(phase: .work, endDate: end, total: 1500), progress: 0.25,
+    .init(state: .running(phase: .work, endDate: t0, total: 1500), progress: 0.25,
           expected: .init(style: .filled, arc: 0.25)),
-    .init(state: .running(phase: .rest, endDate: end, total: 300), progress: 0.5,
+    .init(state: .running(phase: .rest, endDate: t0, total: 300), progress: 0.5,
           expected: .init(style: .outlined, arc: 0.5)),
     .init(state: .paused(phase: .work, remaining: 600, total: 1500), progress: 0.6,
           expected: .init(style: .filled, arc: 0.6)),

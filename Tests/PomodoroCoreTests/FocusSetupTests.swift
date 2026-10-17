@@ -9,7 +9,7 @@ import Testing
         (.available, nil),
         (.missing(names: [FocusController.offName]), "Shortcut “Pomodoro Focus Off” not found"),
         (.missing(names: [FocusController.onName, FocusController.offName]), "Focus shortcuts not set up"),
-        (.error("boom"), "Couldn't check Focus shortcuts"),
+        (.error(.failed(status: 1, stderr: "boom")), "Couldn't check Focus shortcuts"),
     ])
     func hintMessagePerAvailability(_ availability: FocusAvailability, _ expected: String?) {
         #expect(FocusHintView.message(for: availability) == expected)
@@ -36,7 +36,9 @@ import Testing
         (.missing(names: [FocusController.onName]), "Missing: “Pomodoro Focus On”"),
         (.missing(names: [FocusController.onName, FocusController.offName]),
          "Missing: “Pomodoro Focus On”, “Pomodoro Focus Off”"),
-        (.error("timed out"), "Couldn't check shortcuts: timed out"),
+        (.error(.timeout), "Couldn't check Focus shortcuts: timed out"),
+        (.error(.failed(status: 3, stderr: "")), "Couldn't check Focus shortcuts: exit status 3"),
+        (.error(.launchFailed("no such file")), "Couldn't run the shortcuts tool: no such file"),
     ])
     func statusTextPerAvailability(_ availability: FocusAvailability, _ expected: String) {
         #expect(FocusSetupView.statusText(for: availability) == expected)

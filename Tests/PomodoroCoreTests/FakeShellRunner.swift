@@ -6,7 +6,7 @@ final class FakeShellRunner: ShellRunner, @unchecked Sendable {
     struct Call: Equatable {
         let executable: String
         let args: [String]
-        let timeout: TimeInterval
+        let timeout: Duration
     }
 
     typealias Handler = @Sendable (_ executable: String, _ args: [String]) throws -> ShellResult
@@ -20,27 +20,25 @@ final class FakeShellRunner: ShellRunner, @unchecked Sendable {
         self.handler = handler
     }
 
-    /// `shortcuts list` prints `names`, one per line; every other command succeeds.
-    static func listing(_ names: [String]) -> FakeShellRunner {
+    /// `shortcuts list` prints `names`, one per line; every other command succeeds. Each call is
+    /// appended to `log` as `shell <args>`.
+    static func listing(_ names: [String], log: EventLog? = nil) -> FakeShellRunner {
         FakeShellRunner { _, args in
+            log?.append("shell \(args.joined(separator: " "))")
             let stdout = args == ["list"] ? names.joined(separator: "\n") + "\n" : ""
             return ShellResult(status: 0, stdout: stdout, stderr: "")
         }
     }
 
     var calls: [Call] {
-        lock.lock()
-        defer { lock.unlock() }
-        return recorded
+        lock.withLock { recorded }
     }
 
     func setHandler(_ newHandler: @escaping Handler) {
-        lock.lock()
-        handler = newHandler
-        lock.unlock()
+        lock.withLock { handler = newHandler }
     }
 
-    func run(_ executable: String, _ args: [String], timeout: TimeInterval) async throws -> ShellResult {
+    func run(_ executable: String, _ args: [String], timeout: Duration) async throws -> ShellResult {
         let current = lock.withLock {
             recorded.append(Call(executable: executable, args: args, timeout: timeout))
             return handler

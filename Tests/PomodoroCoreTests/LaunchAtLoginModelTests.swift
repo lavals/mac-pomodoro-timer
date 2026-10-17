@@ -5,35 +5,6 @@ import SwiftUI
 import Testing
 @testable import PomodoroCore
 
-/// In-memory login service: never touches the real login items.
-final class FakeLoginService: LoginService {
-    struct Failure: LocalizedError {
-        var errorDescription: String? { "Operation not permitted" }
-    }
-
-    var status: SMAppService.Status
-    /// Status after a successful `register()`.
-    var statusAfterRegister: SMAppService.Status = .enabled
-    var error: Error?
-    private(set) var calls: [String] = []
-
-    init(status: SMAppService.Status = .notRegistered) {
-        self.status = status
-    }
-
-    func register() throws {
-        calls.append("register")
-        if let error { throw error }
-        status = statusAfterRegister
-    }
-
-    func unregister() throws {
-        calls.append("unregister")
-        if let error { throw error }
-        status = .notRegistered
-    }
-}
-
 @MainActor
 @Suite struct LaunchAtLoginModelTests {
     @Test func mirrorsStatusOnInit() {
@@ -174,42 +145,5 @@ final class FakeLoginService: LoginService {
         model.setEnabled(true)
         #expect(service.calls.isEmpty)
         #expect(!model.isEnabled)
-    }
-}
-
-@MainActor
-@Suite struct SettingsWindowTests {
-    @Test func windowIsReusableTitledAndFixedSize() {
-        let testDefaults = TestDefaults()
-        defer { testDefaults.cleanUp() }
-        let controller = HostedWindowController.settings(
-            preferences: Preferences(defaults: testDefaults.defaults),
-            launchAtLogin: LaunchAtLoginModel(service: FakeLoginService(), isBundled: false)
-        )
-        let window = controller.window
-        #expect(window.title == "Pomodoro Settings")
-        #expect(!window.isReleasedWhenClosed)
-        #expect(window.styleMask.contains(.titled))
-        #expect(window.styleMask.contains(.closable))
-        #expect(!window.styleMask.contains(.resizable))
-        #expect(window.contentView is NSHostingView<SettingsView>)
-        #expect(window.contentView?.frame.width == 360)
-        #expect(!window.isVisible)
-    }
-
-    @Test func showingTheSettingsWindowRereadsTheLoginItem() {
-        let testDefaults = TestDefaults()
-        defer { testDefaults.cleanUp() }
-        let service = FakeLoginService()
-        let launchAtLogin = LaunchAtLoginModel(service: service, isBundled: true)
-        let controller = HostedWindowController.settings(
-            preferences: Preferences(defaults: testDefaults.defaults),
-            launchAtLogin: launchAtLogin
-        )
-        service.status = .enabled
-
-        controller.onShow()
-
-        #expect(launchAtLogin.isEnabled)
     }
 }

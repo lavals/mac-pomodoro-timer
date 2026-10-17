@@ -2,7 +2,6 @@ import Foundation
 import Testing
 @testable import PomodoroCore
 
-private let t0 = Date(timeIntervalSinceReferenceDate: 1_000_000)
 private let durations = Durations(work: 1500, rest: 300)
 
 private let workEndEffects: [Effect] = [

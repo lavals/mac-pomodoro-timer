@@ -2,7 +2,7 @@ import Foundation
 
 /// Largest value `formatRemaining` shows (`999:59`). Far above the longest session
 /// (`Preferences.minuteRange`), it only guards the `Int` conversion against absurd values.
-public let maxDisplayedSeconds = 999 * 60 + 59
+private let maxDisplayedSeconds = 999 * 60 + 59
 
 /// Formats seconds as `mm:ss` (minutes grow past two digits, e.g. `120:00`), rounding up to
 /// whole seconds so a fresh 25-minute session reads `25:00`. Negative or NaN values show `00:00`.

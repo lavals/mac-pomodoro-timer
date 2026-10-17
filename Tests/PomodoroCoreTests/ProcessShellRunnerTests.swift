@@ -6,7 +6,7 @@ import Testing
 @Suite struct ProcessShellRunnerTests {
     private let runner = ProcessShellRunner()
 
-    private func sh(_ script: String, timeout: TimeInterval = 10) async throws -> ShellResult {
+    private func sh(_ script: String, timeout: Duration = .seconds(10)) async throws -> ShellResult {
         try await runner.run("/bin/sh", ["-c", script], timeout: timeout)
     }
 
@@ -39,7 +39,7 @@ import Testing
         let started = Date()
 
         await #expect(throws: ShellError.timeout) {
-            try await sh("sleep 1; touch '\(marker.path)'", timeout: 0.2)
+            try await sh("sleep 1; touch '\(marker.path)'", timeout: .milliseconds(200))
         }
         #expect(Date().timeIntervalSince(started) < 1)
 
@@ -57,7 +57,7 @@ import Testing
 
     @Test func missingExecutableFailsToLaunch() async {
         await #expect {
-            try await runner.run("/nonexistent/definitely-not-here", [], timeout: 1)
+            try await runner.run("/nonexistent/definitely-not-here", [], timeout: .seconds(1))
         } throws: { error in
             if case ShellError.launchFailed = error { return true }
             return false

@@ -90,15 +90,28 @@ public enum TimerPresentation {
             + [.separator, .toggleCountdown, .settings, .separator, .quit]
     }
 
-    /// One-line explanation of a failed Focus call for the popover.
+    /// Popover hint when `shortcuts list` failed; `focusCheckErrorMessage` adds the reason.
+    public static let focusCheckFailed = "Couldn't check Focus shortcuts"
+
+    /// One-line explanation of a failed Focus On or Off run for the popover.
     public static func focusErrorMessage(_ error: FocusError) -> String {
+        message(for: error, couldNot: "Couldn't run the Focus shortcut")
+    }
+
+    /// Explanation of a failed `shortcuts list` for the Focus setup window.
+    public static func focusCheckErrorMessage(_ error: FocusError) -> String {
+        message(for: error, couldNot: focusCheckFailed)
+    }
+
+    /// `<couldNot>: <reason>`; a tool that did not start is named as such whatever the call was.
+    private static func message(for error: FocusError, couldNot: String) -> String {
         switch error {
         case .launchFailed(let message):
             return "Couldn't run the shortcuts tool: \(message)"
         case .timeout:
-            return "Focus shortcut timed out"
+            return "\(couldNot): timed out"
         case .failed(let status, let stderr):
-            return stderr.isEmpty ? "Focus shortcut failed (exit \(status))" : "Focus shortcut failed: \(stderr)"
+            return "\(couldNot): " + (stderr.isEmpty ? "exit status \(status)" : stderr)
         }
     }
 }
