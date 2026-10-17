@@ -237,18 +237,19 @@ struct FocusController {
 - Create: `Sources/PomodoroCore/Settings/Preferences.swift`
 - Create: `Tests/PomodoroCoreTests/TestDefaults.swift` (helper: unique suite + cleanup)
 - Create: `Tests/PomodoroCoreTests/PreferencesTests.swift`
+- Create: `Sources/PomodoroCore/Timer/TimerState.swift` (only `Phase` and `Durations`, needed by `Preferences.durations`)
 
-- [ ] implement `Preferences` (`@Observable`, injected `UserDefaults`) with `workMinutes`, `restMinutes`, `showCountdown`, defaults 25/5/true
-- [ ] clamp minute setters to 1…120 in `didSet` and expose `durations: Durations` (define `Durations` here or in Task 3's file; keep one definition)
-- [ ] write the `TestDefaults` helper (unique suite name per test, `removePersistentDomain` cleanup)
-- [ ] write tests for defaults when the suite is empty
-- [ ] write tests for persistence round-trip and clamping (0 → 1, 500 → 120)
-- [ ] run `make test` - must pass before task 3
+- [x] implement `Preferences` (`@Observable`, injected `UserDefaults`) with `workMinutes`, `restMinutes`, `showCountdown`, defaults 25/5/true
+- [x] clamp minute setters to 1…120 in `didSet` and expose `durations: Durations` (define `Durations` here or in Task 3's file; keep one definition); `Phase` and `Durations` live in `Timer/TimerState.swift`, Task 3 adds the rest
+- [x] write the `TestDefaults` helper (unique suite name per test, `removePersistentDomain` cleanup)
+- [x] write tests for defaults when the suite is empty
+- [x] write tests for persistence round-trip and clamping (0 → 1, 500 → 120)
+- [x] run `make test` - must pass before task 3
 
 ### Task 3: Timer engine state machine
 
 **Files:**
-- Create: `Sources/PomodoroCore/Timer/TimerState.swift` (Phase, TimerState, Effect, Chime, Durations)
+- Modify: `Sources/PomodoroCore/Timer/TimerState.swift` (Phase and Durations exist from Task 2; add TimerState, Effect, Chime)
 - Create: `Sources/PomodoroCore/Timer/TimerEngine.swift`
 - Create: `Sources/PomodoroCore/Timer/TimeFormatting.swift`
 - Create: `Tests/PomodoroCoreTests/TimerEngineTests.swift`
