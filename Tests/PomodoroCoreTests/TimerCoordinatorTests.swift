@@ -34,7 +34,8 @@ struct Harness {
     /// - Parameters:
     ///   - shortcuts: names `shortcuts list` reports.
     ///   - saved: session state saved before launch.
-    init(shortcuts: [String] = bothShortcuts, saved: TimerState? = nil) {
+    ///   - savedData: raw bytes stored under the session key before launch (e.g. corrupt data).
+    init(shortcuts: [String] = bothShortcuts, saved: TimerState? = nil, savedData: Data? = nil) {
         let log = log
         runner = FakeShellRunner { _, args in
             log.append("shell \(args.joined(separator: " "))")
@@ -45,6 +46,7 @@ struct Harness {
         preferences = Preferences(defaults: testDefaults.defaults)
         store = SessionStore(defaults: testDefaults.defaults)
         if let saved { store.save(saved) }
+        if let savedData { testDefaults.defaults.set(savedData, forKey: SessionStore.key) }
         let clock = clock
         coordinator = TimerCoordinator(
             now: { clock.now },
@@ -222,6 +224,23 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.coordinator.displayTime == "50:00")
     }
 
+    @Test func startUsesTheCurrentPreferenceDurations() {
+        let h = Harness(shortcuts: [])
+        defer { h.cleanUp() }
+        h.preferences.workMinutes = 1
+        h.preferences.restMinutes = 2
+
+        h.coordinator.start()
+        #expect(h.coordinator.state == .running(phase: .work, endDate: t0.addingTimeInterval(60), total: 60))
+        #expect(h.coordinator.displayTime == "01:00")
+
+        h.clock.advance(60)
+        h.coordinator.tick()
+        #expect(h.coordinator.displayTime == "02:00")
+        h.coordinator.start()
+        #expect(h.coordinator.state == .running(phase: .rest, endDate: t0.addingTimeInterval(180), total: 120))
+    }
+
     @Test func toggleCountdownFlipsPreference() {
         let h = Harness(shortcuts: [])
         defer { h.cleanUp() }
@@ -264,6 +283,30 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.coordinator.state == .finished(phase: .work))
         #expect(h.tickers.active == nil)
         #expect(h.alerts.chimes == [.workEnded])
+    }
+
+    @Test func finishedPhaseWaitsForTheUserToStartTheNext() async {
+        let h = Harness(shortcuts: [])
+        defer { h.cleanUp() }
+        h.coordinator.start()
+        h.clock.advance(1500)
+        h.coordinator.tick()
+        #expect(h.coordinator.state == .finished(phase: .work))
+
+        // more time, ticks and a wake never auto-start the break or chime again
+        h.clock.advance(3600)
+        h.coordinator.tick()
+        h.wakeCenter.post(name: NSWorkspace.didWakeNotification, object: nil)
+        await Task.yield()
+        await h.settle()
+        #expect(h.coordinator.state == .finished(phase: .work))
+        #expect(h.alerts.chimes == [.workEnded])
+        #expect(h.alerts.notifications.count == 1)
+        #expect(h.tickers.active == nil)
+        #expect(h.coordinator.primaryAction == .startBreak)
+
+        h.coordinator.start()
+        #expect(h.coordinator.state == .running(phase: .rest, endDate: h.clock.now.addingTimeInterval(300), total: 300))
     }
 
     @Test func wakeNotificationTicks() async throws {
@@ -317,6 +360,19 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.coordinator.state == paused)
         #expect(h.tickers.active == nil)
         #expect(h.runner.calls.isEmpty)
+    }
+
+    @Test func corruptSavedSessionIsIgnoredAndOverwritten() async {
+        let h = Harness(savedData: Data("not a timer state".utf8))
+        defer { h.cleanUp() }
+        await h.settle()
+
+        #expect(h.coordinator.state == .idle)
+        #expect(h.coordinator.displayTime == "25:00")
+        #expect(h.store.load() == .idle)
+        #expect(h.tickers.active == nil)
+        #expect(h.runner.calls.isEmpty)
+        #expect(h.alerts.chimes.isEmpty)
     }
 
     // MARK: focus failures and availability
@@ -469,18 +525,38 @@ private let focusOff = ["run", FocusController.offName]
     }
 }
 
-/// Set once from an observation callback.
-private final class Flag: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value = false
-
-    func set() { lock.withLock { value = true } }
-    var isSet: Bool { lock.withLock { value } }
-}
-
 private extension TimerState {
     var isRunning: Bool {
         if case .running = self { return true }
         return false
+    }
+}
+
+/// The real one-second ticker. Runs the main run loop by hand, so it must stay on the main actor.
+@MainActor
+@Suite(.serialized) struct SystemTickerTests {
+    /// The status item's menu runs the main run loop in event-tracking mode; a timer scheduled
+    /// only in the default mode would freeze the countdown while the menu is open.
+    @Test func keepsFiringWhileAMenuIsTracking() {
+        var fires = 0
+        let ticker = SystemTicker { fires += 1 }
+        defer { ticker.invalidate() }
+
+        let deadline = Date().addingTimeInterval(3)
+        while fires < 2, Date() < deadline {
+            RunLoop.main.run(mode: .eventTracking, before: Date().addingTimeInterval(0.1))
+        }
+
+        #expect(fires >= 2)
+    }
+
+    @Test func stopsFiringOnceInvalidated() {
+        var fires = 0
+        let ticker = SystemTicker { fires += 1 }
+        ticker.invalidate()
+
+        RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(1.3))
+
+        #expect(fires == 0)
     }
 }

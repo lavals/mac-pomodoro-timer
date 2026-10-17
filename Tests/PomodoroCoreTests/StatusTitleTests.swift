@@ -69,4 +69,11 @@ private let end = Date(timeIntervalSinceReferenceDate: 1_000_000)
         #expect(menu.items.map(\.title).first == "Start Focus")
         #expect(menu.items.first { $0.title == "Show Countdown in Menu Bar" }?.state == .off)
     }
+
+    @Test func rightClickOrControlClickOpensTheMenu() {
+        #expect(StatusItemController.wantsMenu(eventType: .rightMouseUp, modifierFlags: []))
+        #expect(StatusItemController.wantsMenu(eventType: .leftMouseUp, modifierFlags: [.control]))
+        #expect(!StatusItemController.wantsMenu(eventType: .leftMouseUp, modifierFlags: []))
+        #expect(!StatusItemController.wantsMenu(eventType: .leftMouseUp, modifierFlags: [.option]))
+    }
 }

@@ -79,13 +79,16 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func handleClick(_ sender: NSStatusBarButton) {
         guard let event = NSApp.currentEvent else { return }
-        let wantsMenu = event.type == .rightMouseUp
-            || (event.type == .leftMouseUp && event.modifierFlags.contains(.control))
-        if wantsMenu {
+        if Self.wantsMenu(eventType: event.type, modifierFlags: event.modifierFlags) {
             showMenu()
         } else {
             togglePopover()
         }
+    }
+
+    /// Right click or control-click opens the menu; a plain left click toggles the popover.
+    static func wantsMenu(eventType: NSEvent.EventType, modifierFlags: NSEvent.ModifierFlags) -> Bool {
+        eventType == .rightMouseUp || (eventType == .leftMouseUp && modifierFlags.contains(.control))
     }
 
     private func togglePopover() {

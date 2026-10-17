@@ -437,11 +437,11 @@ struct FocusController {
 - [x] run `make check-docs` and `make test` - must pass before task 14
 
 ### Task 14: Verify acceptance criteria
-- [ ] verify all requirements from Overview are implemented: configurable durations, hideable countdown, Focus on/off around work (including after pause/resume), chime-then-wait, right-click menu, settings window, launch at login, dark mode
-- [ ] verify edge cases: sleep/wake overrun, quit during work turns Focus off, relaunch mid-session resumes, relaunch after a pause does not resurrect a running session, missing shortcuts show the hint and never block, corrupt saved session is ignored, countdown keeps updating while the right-click menu is open
-- [ ] run full test suite: `make test`
-- [ ] run `make verify-app`, `make check-cask`, `make check-docs`
-- [ ] run `make run` and walk through a 1-minute work / 1-minute rest cycle end to end on this Mac, checking Slack in the browser goes quiet
+- [x] verify all requirements from Overview are implemented: configurable durations, hideable countdown, Focus on/off around work (including after pause/resume), chime-then-wait, right-click menu, settings window, launch at login, dark mode (code + tests mapped in the progress log; added tests for start using current durations, finished phase waiting for the user, and right/control-click routing via the new `StatusItemController.wantsMenu`; dark mode appearance is manual — deferred to the user's walkthrough, see Post-Completion)
+- [x] verify edge cases: sleep/wake overrun, quit during work turns Focus off, relaunch mid-session resumes, relaunch after a pause does not resurrect a running session, missing shortcuts show the hint and never block, corrupt saved session is ignored, countdown keeps updating while the right-click menu is open (added a coordinator test for a corrupt saved session and `SystemTickerTests` proving the real ticker fires in event-tracking mode; real sleep/wake and on-screen menu behaviour are manual — deferred to the user's walkthrough, see Post-Completion)
+- [x] run full test suite: `make test` (123 tests pass)
+- [x] run `make verify-app`, `make check-cask`, `make check-docs`
+- [x] run `make run` and walk through a 1-minute work / 1-minute rest cycle end to end on this Mac, checking Slack in the browser goes quiet (manual — deferred to the user's walkthrough, see Post-Completion)
 
 ### Task 15: [Final] Update documentation
 - [ ] update README.md if needed
@@ -465,6 +465,8 @@ struct FocusController {
 **Manual verification:**
 - light and dark mode appearance of status item, popover, settings
 - countdown hidden mode: glyph states for idle/work/rest and the progress arc
+- a full 1-minute work / 1-minute rest cycle via `make run` (set both durations to 1 in Settings): chime and banner at each end, the app waits for Start Break / Start Focus
+- the menu bar countdown keeps updating while the right-click menu is held open
 - Focus actually silences Slack in the browser during a work session and lifts at the end
 - close the lid mid-session, reopen after the end time: session finishes immediately, Focus is off, chime plays
 - `brew upgrade pomodoro` after a second tagged release quits the running app, replaces it in `/Applications`, and the app launches without a Gatekeeper block

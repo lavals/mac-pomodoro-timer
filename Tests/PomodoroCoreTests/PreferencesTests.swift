@@ -65,14 +65,14 @@ import Testing
         defer { testDefaults.cleanUp() }
 
         let prefs = Preferences(defaults: testDefaults.defaults)
-        var fired = false
+        let fired = Flag()
         withObservationTracking {
             _ = prefs.workMinutes
         } onChange: {
-            fired = true
+            fired.set()
         }
         prefs.workMinutes = 30
-        #expect(fired)
+        #expect(fired.isSet)
     }
 
     @Test func durationsTotalPerPhase() {

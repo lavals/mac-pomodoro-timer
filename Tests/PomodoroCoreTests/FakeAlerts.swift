@@ -15,6 +15,15 @@ final class EventLog: @unchecked Sendable {
     }
 }
 
+/// Set once from an observation callback, which may run on another thread.
+final class Flag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+
+    func set() { lock.withLock { value = true } }
+    var isSet: Bool { lock.withLock { value } }
+}
+
 /// Records chimes and notifications instead of playing sounds or posting real notifications.
 @MainActor
 final class FakeAlerts: Alerts {
