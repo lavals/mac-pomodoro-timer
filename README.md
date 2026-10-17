@@ -33,7 +33,7 @@ Then open Pomodoro from `/Applications`. It lives in the menu bar and has no Doc
 
 ### Why the cask removes the quarantine flag
 
-The app is signed ad hoc and is not notarized by Apple. Homebrew marks every downloaded cask with the `com.apple.quarantine` attribute, and Gatekeeper refuses to open an un-notarized app that carries it. The cask's `postflight` step removes that attribute from `/Applications/Pomodoro.app` so the app opens normally. If you prefer not to rely on that, build the app from source instead (see below; building needs macOS 15.6 or later).
+The app is signed ad hoc and is not notarized by Apple. Homebrew marks every downloaded cask with the `com.apple.quarantine` attribute, and Gatekeeper refuses to open an un-notarized app that carries it. The cask's `postflight_steps` stanza runs `xattr` to remove that attribute from `/Applications/Pomodoro.app` so the app opens normally. If you prefer not to rely on that, build the app from source instead (see below; building needs macOS 15.6 or later).
 
 ## Set up Focus
 
@@ -78,7 +78,7 @@ make run
 | `make app`        | Builds the app bundle into `build/Pomodoro.app`                |
 | `make install`    | Builds the app and copies it to `/Applications`                |
 | `make verify-app` | Builds the bundle and checks its Info.plist, version and signature |
-| `make check-cask` | Renders the Homebrew cask template and checks its syntax       |
+| `make check-cask` | Renders the Homebrew cask template, checks its syntax and loads it with Homebrew to catch deprecated cask syntax |
 | `make check-docs` | Checks that the README and the Focus guide name both shortcuts and that the README links the guide |
 
 ## Release process

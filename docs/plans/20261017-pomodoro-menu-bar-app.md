@@ -16,7 +16,7 @@
   - ⚠️ `swift test` **fails as soon as the package has an executable target** (`plugin for module 'TestingMacros' not found`), even when tests only import a library target. Verified fix: `swift test -Xswiftc -plugin-path -Xswiftc "$(dirname "$(xcrun --find swift)")/../lib/swift/host/plugins/testing"`. `make test` adds that flag only when `xcode-select -p` points at the Command Line Tools, so CI (Xcode toolchain) runs plain `swift test`. The flag must not go into `Package.swift`.
   - the default build system is `swiftbuild`; release binaries land under `$(swift build -c release --show-bin-path)`, **not** `.build/release`
   - Command Line Tools build **arm64 only**; universal binaries need Xcode. Decision: ship arm64 only, cask declares `depends_on arch: :arm64`.
-- Homebrew 7.0.9 is installed. ⚠️ **`brew install --no-quarantine` no longer exists** and Homebrew always quarantines cask downloads. Since the app is ad-hoc signed and not notarized, Gatekeeper on macOS 15+ would refuse it, so the cask's `postflight` removes `com.apple.quarantine` from the installed app. Ad-hoc signatures also change on every build, so Homebrew prints a "signer changed" warning on upgrade; that is expected.
+- Homebrew 7.0.9 is installed. ⚠️ **`brew install --no-quarantine` no longer exists** and Homebrew always quarantines cask downloads. Since the app is ad-hoc signed and not notarized, Gatekeeper on macOS 15+ would refuse it, so the cask's `postflight_steps` removes `com.apple.quarantine` from the installed app (the legacy `postflight do` block is deprecated in Homebrew 7). Ad-hoc signatures also change on every build, so Homebrew prints a "signer changed" warning on upgrade; that is expected.
 - `/usr/bin/shortcuts`, `iconutil`, `codesign`, `ditto`, `sips`, `plutil` are all present; system sounds exist at `/System/Library/Sounds` so no audio files need shipping
 - headless AppKit (`NSImage`, `NSFont`, `NSAttributedString`) works inside `swift test` (verified by plan review)
 - brainstorm design (approved): AppKit `NSStatusItem` + `NSPopover` hosting SwiftUI views; pure-Swift timer engine returning effects; Focus via `shortcuts run`; Swift Package build with a bundle-assembly script; GitHub Actions release to a Homebrew tap
@@ -44,7 +44,7 @@
 - **unit tests**: required for every task (see Development Approach above). Run with `make test`.
 - **no e2e framework**: UI is verified by a smoke launch (`make run`) and the manual scenarios under Post-Completion
 - **fakes over mocks**: injected `now: () -> Date`, a `ShellRunner` protocol for the `shortcuts` CLI, an `Alerts` protocol for chime/notification, a `LoginService` protocol for `SMAppService`
-- **build artefacts**: `make verify-app` builds the bundle and checks `Info.plist`, version and signature; `make check-cask` renders the cask and checks it with `ruby -c`; both run in CI
+- **build artefacts**: `make verify-app` builds the bundle and checks `Info.plist`, version and signature; `make check-cask` renders the cask, checks it with `ruby -c` and loads it with `HOMEBREW_DEVELOPER=1 brew ruby` so deprecated cask DSL fails; both run in CI
 - **CI**: `make test` + `make verify-app` + `make check-cask` on every push to `main` and every PR, on a pinned `macos-26` runner; release build only on tags
 
 ## Progress Tracking
@@ -197,11 +197,11 @@ struct FocusController {
     name "Pomodoro"
     desc "Menu bar pomodoro timer that turns on macOS Focus while you work"
     homepage "https://github.com/lavals/mac-pomodoro-timer"
-    depends_on macos: ">= :sonoma"
+    depends_on macos: :sonoma
     depends_on arch: :arm64
     app "Pomodoro.app"
-    postflight do
-      system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{appdir}/Pomodoro.app"]
+    postflight_steps do
+      run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/Pomodoro.app"]
     end
     uninstall quit: "com.lavals.pomodoro"
     zap trash: ["~/Library/Preferences/com.lavals.pomodoro.plist"]
@@ -469,4 +469,5 @@ struct FocusController {
 - the menu bar countdown keeps updating while the right-click menu is held open
 - Focus actually silences Slack in the browser during a work session and lifts at the end
 - close the lid mid-session, reopen after the end time: session finishes immediately, Focus is off, chime plays
+- first `brew install pomodoro` from the tap: the `postflight_steps` xattr step runs inside Homebrew's cask sandbox; confirm `xattr -p com.apple.quarantine /Applications/Pomodoro.app` reports no such attribute and the app launches without a Gatekeeper prompt
 - `brew upgrade pomodoro` after a second tagged release quits the running app, replaces it in `/Applications`, and the app launches without a Gatekeeper block

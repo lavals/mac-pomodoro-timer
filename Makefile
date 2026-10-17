@@ -31,12 +31,17 @@ install: app
 verify-app:
 	scripts/verify-app.sh
 
-# render the cask with dummy values, check Ruby syntax, fail on any unrendered placeholder
+# render the cask with dummy values, check Ruby syntax, fail on any unrendered placeholder,
+# then (when brew is installed) load it read-only with HOMEBREW_DEVELOPER=1 so deprecated DSL fails
 check-cask:
-	@set -e; out="$$(mktemp -t pomodoro-cask)"; trap 'rm -f "$$out"' EXIT; \
+	@set -e; dir="$$(mktemp -d -t pomodoro-cask)"; trap 'rm -rf "$$dir"' EXIT; out="$$dir/pomodoro.rb"; \
 	scripts/render-cask.sh 0.0.0 "$$(printf '0%.0s' $$(seq 64))" > "$$out"; \
 	ruby -c "$$out" > /dev/null; \
 	if grep -n '__' "$$out"; then echo "unrendered placeholder in cask" >&2; exit 1; fi; \
+	if command -v brew > /dev/null; then \
+	  HOMEBREW_DEVELOPER=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_FROM_API=1 HOMEBREW_NO_ENV_HINTS=1 \
+	    brew ruby -e 'Cask::CaskLoader.load(ARGV.first)' "$$out"; \
+	else echo "brew not found; skipped loading the cask with Homebrew"; fi; \
 	echo "cask OK"
 
 # both Focus shortcut names must appear verbatim in the README and the setup guide,

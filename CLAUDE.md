@@ -7,7 +7,7 @@ Swift Package: library `PomodoroCore` (all code), thin executable `Pomodoro` (`m
 - `make test` - run tests. Never bare `swift test`: on Command Line Tools-only machines it fails with "plugin for module 'TestingMacros' not found" once the package has an executable target. `make test` adds the `-plugin-path` flag only when `xcode-select -p` is the CLT path, so CI (Xcode toolchain) runs plain `swift test`. Do not put that flag in `Package.swift`.
 - `make build` - debug `swift build`; `make app` - assemble `build/Pomodoro.app` (release binary, Info.plist, icon, ad-hoc signature); `make clean` - remove `.build` and `build`
 - `make verify-app` - build `build/Pomodoro.app` and check Info.plist, version, signature, arm64
-- `make check-cask` - render the cask template with dummy values and `ruby -c` it
+- `make check-cask` - render the cask template with dummy values, `ruby -c` it, and (if `brew` is installed) load it with `HOMEBREW_DEVELOPER=1 brew ruby` so deprecated cask DSL fails the check (read-only: no tap, no install)
 - `make check-docs` - both Focus shortcut names appear in README and `docs/focus-shortcuts.md`, and README links `docs/focus-shortcuts.md`
 - `scripts/make-icon.sh` - regenerate the committed `packaging/AppIcon.icns` from `scripts/render-icon.swift`; only needed when the icon design changes
 - `make run` / `make install` launch or install the real app; only run them when you mean to.
@@ -29,7 +29,7 @@ Swift Package: library `PomodoroCore` (all code), thin executable `Pomodoro` (`m
 - The 1s ticker must be added to the run loop in `.common` mode, or the countdown freezes while a menu is open.
 - Release binaries land under `$(swift build -c release --show-bin-path)`, not `.build/release`.
 - Command Line Tools build arm64 only; the cask declares `depends_on arch: :arm64`.
-- Homebrew 7 has no `--no-quarantine`; the app is ad-hoc signed and not notarized, so the cask's `postflight` strips `com.apple.quarantine`. Upgrades print a "signer changed" warning; that is expected.
+- Homebrew 7 has no `--no-quarantine`; the app is ad-hoc signed and not notarized, so the cask's `postflight_steps` runs `xattr -dr com.apple.quarantine {{appdir}}/Pomodoro.app` (the legacy `postflight do` block and `depends_on macos: ">= :sym"` are deprecated in Homebrew 7; `postflight_steps` runs in Homebrew's cask sandbox, which allows writes under appdir). Upgrades print a "signer changed" warning; that is expected.
 
 ## Release checklist
 
