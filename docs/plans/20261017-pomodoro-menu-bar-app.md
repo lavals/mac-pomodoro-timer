@@ -444,9 +444,9 @@ struct FocusController {
 - [x] run `make run` and walk through a 1-minute work / 1-minute rest cycle end to end on this Mac, checking Slack in the browser goes quiet (manual — deferred to the user's walkthrough, see Post-Completion)
 
 ### Task 15: [Final] Update documentation
-- [ ] update README.md if needed
-- [ ] create CLAUDE.md with: `make test` (never bare `swift test` on CLT machines, and why), Swift Testing only, the unbundled `UNUserNotificationCenter` guard, `--show-bin-path`, the release checklist, and the no-personal-data rule
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update README.md if needed (reviewed against the code; already accurate, no changes needed)
+- [x] create CLAUDE.md with: `make test` (never bare `swift test` on CLT machines, and why), Swift Testing only, the unbundled `UNUserNotificationCenter` guard, `--show-bin-path`, the release checklist, and the no-personal-data rule
+- [x] move this plan to `docs/plans/completed/` (skipped - the exec harness moves the plan after all phases finish)
 
 ## Post-Completion
 *Items requiring manual intervention or external systems - no checkboxes, informational only*
