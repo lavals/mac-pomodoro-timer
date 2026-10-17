@@ -415,11 +415,12 @@ struct FocusController {
 - Create: `scripts/render-cask.sh`
 - Modify: `Makefile` (add `check-cask`)
 
-- [ ] write `pomodoro.rb.tmpl` (as in Technical Details) and `render-cask.sh`
-- [ ] add `make check-cask` (render with dummy values, `ruby -c`, fail if `__` remains) and run it
-- [ ] write `ci.yml` (`main` pushes + PRs, `macos-26`, `make test`, `make verify-app`, `make check-cask`)
-- [ ] write `release.yml` per Technical Details (tag guard, permissions, release upload, tap checkout with PAT, bot identity, commit only on change, push)
-- [ ] validate both workflows with `actionlint` (`brew install actionlint` if missing) and `make check-cask` as this task's tests - must pass before task 13
+- [x] write `pomodoro.rb.tmpl` (as in Technical Details) and `render-cask.sh`
+- [x] add `make check-cask` (render with dummy values, `ruby -c`, fail if `__` remains) and run it
+- [x] write `ci.yml` (`main` pushes + PRs, `macos-26`, `make test`, `make verify-app`, `make check-cask`)
+- [x] write `release.yml` per Technical Details (tag guard, permissions, release upload, tap checkout with PAT, bot identity, commit only on change, push)
+- [x] validate both workflows with `actionlint` (`brew install actionlint` if missing) and `make check-cask` as this task's tests - must pass before task 13
+- ➕ implementation notes: `render-cask.sh` rejects a version that is not `X.Y.Z` and a SHA that is not 64 lowercase hex chars; `check-cask` runs under `set -e` so a `ruby -c` syntax error fails the target (verified by breaking the template on purpose); the release tap step runs `mkdir -p tap/Casks` (the tap may be empty) and does `git add` then `git diff --cached --quiet`, since plain `git diff --quiet` does not see a newly created, untracked cask file on the first release; both workflows pin `actions/checkout@v5`, CI has `permissions: contents: read`, and `actionlint` 1.7.12 (with shellcheck) reports no errors
 
 ### Task 13: README and Focus shortcut instructions
 

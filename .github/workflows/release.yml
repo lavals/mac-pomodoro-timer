@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+
+      # same X.Y.Z rule as scripts/render-cask.sh, checked here so a bad version fails
+      # before anything is published instead of after the release exists
+      - name: Check tag matches VERSION
+        id: version
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::VERSION file holds invalid version '$VERSION' (expected X.Y.Z)"
+            exit 1
+          fi
+          if [[ "v$VERSION" != "$GITHUB_REF_NAME" ]]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match VERSION file (v$VERSION)"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: make test
+
+      - name: Build and verify app bundle
+        run: make verify-app
+
+      - name: Package zip
+        id: package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          ZIP="Pomodoro-$VERSION.zip"
+          ditto -c -k --keepParent build/Pomodoro.app "$ZIP"
+          SHA="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "$ZIP sha256 $SHA"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: gh release create "$GITHUB_REF_NAME" "$ZIP" --generate-notes
+
+      - name: Check out tap
+        uses: actions/checkout@v5
+        with:
+          repository: lavals/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: tap
+
+      - name: Update cask in tap
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ steps.package.outputs.sha }}
+        run: |
+          mkdir -p tap/Casks
+          scripts/render-cask.sh "$VERSION" "$SHA" > tap/Casks/pomodoro.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/pomodoro.rb
+          if git diff --cached --quiet; then
+            echo "cask already up to date"
+            exit 0
+          fi
+          git commit -m "pomodoro $VERSION"
+          git push

@@ -1,0 +1,23 @@
+cask "pomodoro" do
+  version "__VERSION__"
+  sha256 "__SHA256__"
+
+  url "https://github.com/lavals/mac-pomodoro-timer/releases/download/v#{version}/Pomodoro-#{version}.zip"
+  name "Pomodoro"
+  desc "Menu bar pomodoro timer that turns on macOS Focus while you work"
+  homepage "https://github.com/lavals/mac-pomodoro-timer"
+
+  depends_on macos: ">= :sonoma"
+  depends_on arch: :arm64
+
+  app "Pomodoro.app"
+
+  # the app is ad-hoc signed and not notarized, so Gatekeeper would refuse the quarantined copy
+  postflight do
+    system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{appdir}/Pomodoro.app"]
+  end
+
+  uninstall quit: "com.lavals.pomodoro"
+
+  zap trash: ["~/Library/Preferences/com.lavals.pomodoro.plist"]
+end
