@@ -14,6 +14,18 @@ public enum PrimaryAction: Equatable, Sendable {
     }
 }
 
+/// The popover's text button under the primary one.
+public enum SecondaryAction: Equatable, Sendable {
+    case skip, reset
+
+    public var title: String {
+        switch self {
+        case .skip: return "Skip"
+        case .reset: return "Reset"
+        }
+    }
+}
+
 /// Semantic tint for the progress ring and menu bar title; views map it to a system color.
 public enum RingTint: Equatable, Sendable {
     /// `controlAccentColor`: a work phase.
@@ -60,6 +72,16 @@ public enum TimerPresentation {
 
     public static func primaryActionTitle(for state: TimerState) -> String {
         primaryAction(for: state).title
+    }
+
+    /// The popover's secondary button: `Skip` while a phase is running or paused, `Reset` once it
+    /// finished, none when idle. (The right-click menu offers both while in progress.)
+    public static func secondaryAction(for state: TimerState) -> SecondaryAction? {
+        switch state {
+        case .running, .paused: return .skip
+        case .finished: return .reset
+        case .idle: return nil
+        }
     }
 
     /// `Focus` / `Break` while a phase is running or paused, `Ready` otherwise.

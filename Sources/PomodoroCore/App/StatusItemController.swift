@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import SwiftUI
 
 /// The menu bar item: a glyph plus an optional countdown, a popover on left click and a menu
 /// on right click (or control-click).
@@ -7,12 +8,14 @@ import Observation
 public final class StatusItemController: NSObject, NSMenuDelegate {
     private let coordinator: TimerCoordinator
     private let statusItem: NSStatusItem
+    private let popover: NSPopover
     /// Menu entries behind each item's tag, rebuilt every time the menu opens.
     private var shownItems: [MenuItem] = []
 
     public init(coordinator: TimerCoordinator) {
         self.coordinator = coordinator
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        popover = Self.makePopover(coordinator: coordinator)
         super.init()
         if let button = statusItem.button {
             button.target = self
@@ -63,13 +66,22 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
         }
     }
 
-    /// Placeholder until the popover exists: left click shows the same menu so the timer is usable.
     private func togglePopover() {
-        showMenu()
+        if popover.isShown {
+            popover.performClose(nil)
+            return
+        }
+        guard let button = statusItem.button else { return }
+        // an accessory app must be active for the transient popover to close on outside clicks
+        NSApp.activate()
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        // checked after showing so the shortcuts call never delays the popover
+        coordinator.refreshFocusAvailability()
     }
 
     /// Assigns the menu only while it is open: a permanently assigned menu would swallow left clicks.
     private func showMenu() {
+        if popover.isShown { popover.performClose(nil) }
         shownItems = TimerPresentation.menuItems(for: coordinator.state)
         let menu = Self.makeMenu(
             items: shownItems,
@@ -96,6 +108,17 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
         case .quit: NSApp.terminate(nil)
         case .settings, .separator: break
         }
+    }
+
+    /// A transient popover hosting `PopoverView`, sized by the view's own preferred size.
+    static func makePopover(coordinator: TimerCoordinator) -> NSPopover {
+        let hosting = NSHostingController(rootView: PopoverView(coordinator: coordinator))
+        hosting.sizingOptions = .preferredContentSize
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        popover.contentViewController = hosting
+        return popover
     }
 
     /// Builds the right-click menu. Each item's tag is its index in `items`.

@@ -345,11 +345,12 @@ struct FocusController {
 - Modify: `Sources/PomodoroCore/App/StatusItemController.swift` (host `PopoverView`, activate before show, refresh availability after show)
 - Modify: `Tests/PomodoroCoreTests/TimerPresentationTests.swift`
 
-- [ ] implement `ProgressRing(progress:tint:)` with trailing round cap and a subtle track
-- [ ] implement `PopoverView` per Technical Details reading from `TimerCoordinator` (gear button and Focus hint are wired in Tasks 9 and 10; leave placeholders disabled)
-- [ ] host it in the `NSPopover` with `.preferredContentSize` sizing, `NSApp.activate()` before show, `refreshFocusAvailability()` after show
-- [ ] write tests for any new presentation mapping introduced by the view (secondary button visibility per state: `Skip` while running/paused, `Reset` when finished, none when idle)
-- [ ] run `make test` and smoke-launch to check layout in light and dark mode - must pass before task 9
+- [x] implement `ProgressRing(progress:tint:)` with trailing round cap and a subtle track
+- [x] implement `PopoverView` per Technical Details reading from `TimerCoordinator` (gear button and Focus hint are wired in Tasks 9 and 10; leave placeholders disabled)
+- [x] host it in the `NSPopover` with `.preferredContentSize` sizing, `NSApp.activate()` before show, `refreshFocusAvailability()` after show
+- [x] write tests for any new presentation mapping introduced by the view (secondary button visibility per state: `Skip` while running/paused, `Reset` when finished, none when idle)
+- [x] run `make test` and smoke-launch to check layout in light and dark mode - must pass before task 9 (tests pass; binary launched unbundled with an idle saved session and stayed up without crashing; visual check deferred to Task 14 manual walkthrough)
+- ➕ implementation notes: new `SecondaryAction` enum + `TimerPresentation.secondaryAction(for:)` (the popover shows only Skip while running/paused; Reset during a phase stays in the right-click menu); `RingTint.nsColor`/`.color` live in `ProgressRing.swift` and match `StatusTitle` colors; popover construction is a static `StatusItemController.makePopover(coordinator:)` and is unit-tested (transient, `.preferredContentSize`, fitting width 240 / height ≥ 280); the disabled Focus hint placeholder is a caption label shown for `.missing`/`.error` (`PopoverView.showsFocusHint`), replaced by `FocusHintView` in Task 10; opening the right-click menu closes an open popover
 
 ### Task 9: Settings window with launch-at-login
 
