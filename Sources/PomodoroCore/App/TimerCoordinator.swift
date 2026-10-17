@@ -162,28 +162,42 @@ public final class TimerCoordinator {
     }
 
     /// Called before the app quits: lets queued Focus calls finish (at most `chainBudget`), then
-    /// turns Focus off if the app turned it on (at most `offBudget`). Bounded so quitting never
-    /// hangs on a stuck `shortcuts` run.
+    /// turns Focus off if the app turned it on (at most `offBudget`). An Off that failed (not
+    /// one that timed out: a stuck `shortcuts` run will not recover in time) is retried once
+    /// after `retryDelay`, again within `offBudget`. Bounded so quitting never hangs on a stuck
+    /// `shortcuts` run: with the defaults at most 1.5 + 2 + 0.5 + 2 = 6s, under the 10s
+    /// Homebrew waits for the app to quit.
     ///
     /// When the chain is still running (e.g. a slow Focus On), that On may finish after the Off
     /// and switch Focus back on, so the flag stays set. The next launch then turns Focus off,
     /// whatever the saved state, unless a work phase is still running (it turns Focus on instead).
     public func prepareForTermination(
         chainBudget: Duration = .milliseconds(1500),
-        offBudget: Duration = .seconds(2)
+        offBudget: Duration = .seconds(2),
+        retryDelay: Duration = .milliseconds(500)
     ) async {
         var chainFinished = true
         if let pendingEffects {
             chainFinished = await Self.value(of: pendingEffects, within: chainBudget) != nil
         }
         guard sessionStore.focusTurnedOn else { return }
-        let focus = self.focus
-        let off = Task.detached {
-            await focus.setFocus(false, timeout: offBudget)
+        var result = await focusOff(within: offBudget)
+        if case .failure(let error)? = result, error != .timeout {
+            try? await Task.sleep(for: retryDelay)
+            result = await focusOff(within: offBudget)
         }
-        if case .success = await Self.value(of: off, within: offBudget), chainFinished {
+        if case .success? = result, chainFinished {
             sessionStore.focusTurnedOn = false
         }
+    }
+
+    /// Runs Focus Off detached; nil if it did not finish within `budget` (the run keeps going).
+    private func focusOff(within budget: Duration) async -> Result<Void, FocusError>? {
+        let focus = self.focus
+        let off = Task.detached {
+            await focus.setFocus(false, timeout: budget)
+        }
+        return await Self.value(of: off, within: budget)
     }
 
     /// The task's value, or nil if it did not finish within `budget`. The task keeps running.

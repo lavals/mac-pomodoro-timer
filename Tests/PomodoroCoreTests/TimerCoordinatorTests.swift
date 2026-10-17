@@ -869,9 +869,49 @@ private let focusOff = ["run", FocusController.offName]
         await h.coordinator.prepareForTermination(chainBudget: .milliseconds(100), offBudget: .milliseconds(300))
 
         #expect(!finished.isSet)
+        // an Off that ran out of budget is not retried
         #expect(h.focusRuns == [focusOn, focusOff])
         #expect(h.store.focusTurnedOn)
         release.signal()
+    }
+
+    @Test func failedFocusOffAtQuitIsRetriedOnce() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        h.coordinator.start()
+        await h.settle()
+        // the first termination Off fails, the retry succeeds
+        let offs = Counter()
+        h.runner.setHandler { _, args in
+            if args == focusOff, offs.increment() == 1 {
+                return ShellResult(status: 1, stdout: "", stderr: "busy")
+            }
+            return ShellResult(status: 0, stdout: "", stderr: "")
+        }
+
+        await h.coordinator.prepareForTermination(retryDelay: .milliseconds(50))
+
+        #expect(h.focusRuns == [focusOn, focusOff, focusOff])
+        #expect(h.runner.calls.last?.timeout == .seconds(2))
+        #expect(h.store.focusTurnedOn == false)
+    }
+
+    @Test func focusOffThatKeepsFailingAtQuitIsTriedTwiceAndKeepsTheFlag() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        h.coordinator.start()
+        await h.settle()
+        h.runner.setHandler { _, _ in ShellResult(status: 1, stdout: "", stderr: "busy") }
+
+        let clock = ContinuousClock()
+        let elapsed = await clock.measure {
+            await h.coordinator.prepareForTermination(retryDelay: .milliseconds(50))
+        }
+
+        // one retry only, within the documented quit bound; the next launch turns Focus off
+        #expect(h.focusRuns == [focusOn, focusOff, focusOff])
+        #expect(h.store.focusTurnedOn)
+        #expect(elapsed < .seconds(6))
     }
 
     @Test func quittingWhileFocusOnIsStillRunningKeepsTheFlagForTheNextLaunch() async {
