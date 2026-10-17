@@ -9,13 +9,27 @@ else
 TEST_FLAGS :=
 endif
 
-.PHONY: build test clean
+.PHONY: build test app run install verify-app clean
 
 build:
 	swift build
 
 test:
 	swift test $(TEST_FLAGS)
+
+# assemble build/Pomodoro.app (release binary, Info.plist, icon, ad-hoc signature)
+app:
+	scripts/build-app.sh
+
+run: app
+	open build/Pomodoro.app
+
+install: app
+	rm -rf /Applications/Pomodoro.app
+	ditto build/Pomodoro.app /Applications/Pomodoro.app
+
+verify-app:
+	scripts/verify-app.sh
 
 clean:
 	swift package clean

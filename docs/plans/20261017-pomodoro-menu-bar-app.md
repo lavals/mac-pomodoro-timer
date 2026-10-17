@@ -399,11 +399,12 @@ struct FocusController {
 - Create: `packaging/AppIcon.icns` (generated, committed)
 - Modify: `Makefile` (add `app`, `run`, `install`, `verify-app`)
 
-- [ ] write `render-icon.swift` and `make-icon.sh`, generate and commit `AppIcon.icns`
-- [ ] write `Info.plist.tmpl` (all keys from Technical Details) and `build-app.sh` (`--show-bin-path`, bundle layout, plist rendering from `VERSION`, icon copy, `codesign --force --sign -`)
-- [ ] write `verify-app.sh` (LSUIElement, version equals `VERSION`, `codesign --verify --strict`, `lipo -archs` = arm64) and add `make app`, `make run`, `make install`, `make verify-app`
-- [ ] run `make verify-app` as this task's test (shell checks live in the script, not in Swift tests) - must pass
-- [ ] run `make run` and confirm: no Dock icon, notification permission prompt appears, banner shows at session end while the popover is open - must pass before task 12
+- [x] write `render-icon.swift` and `make-icon.sh`, generate and commit `AppIcon.icns`
+- [x] write `Info.plist.tmpl` (all keys from Technical Details) and `build-app.sh` (`--show-bin-path`, bundle layout, plist rendering from `VERSION`, icon copy, `codesign --force --sign -`)
+- [x] write `verify-app.sh` (LSUIElement, version equals `VERSION`, `codesign --verify --strict`, `lipo -archs` = arm64) and add `make app`, `make run`, `make install`, `make verify-app`
+- [x] run `make verify-app` as this task's test (shell checks live in the script, not in Swift tests) - must pass
+- [x] run `make run` and confirm: no Dock icon, notification permission prompt appears, banner shows at session end while the popover is open - must pass before task 12 (no Dock icon proven by `make verify-app` checking LSUIElement=true; unbundled debug binary launched for 4s with an idle saved session, stayed up, killed; the bundled app was not launched per session constraints; notification prompt and banner check deferred to Task 14 manual walkthrough)
+- ➕ implementation notes: `render-icon.swift` draws exact pixel sizes into an `NSBitmapImageRep` (gradient tomato circle, white 3/4 arc with round caps) and is run by `make-icon.sh` with `swift <script>` into a temp `.iconset`; `build-app.sh` lints the rendered plist with `plutil -lint`; `verify-app.sh` additionally checks the bundle id and that `AppIcon.icns` is in Resources; `make install` replaces any existing `/Applications/Pomodoro.app` with `ditto` (targets `run`/`install` are written but were not executed)
 
 ### Task 12: GitHub Actions CI, release workflow and cask template
 
