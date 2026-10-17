@@ -26,3 +26,6 @@ jobs:
 
       - name: Check cask template
         run: make check-cask
+
+      - name: Check docs
+        run: make check-docs

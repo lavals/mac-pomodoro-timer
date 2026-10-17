@@ -9,7 +9,7 @@ else
 TEST_FLAGS :=
 endif
 
-.PHONY: build test app run install verify-app check-cask clean
+.PHONY: build test app run install verify-app check-cask check-docs clean
 
 build:
 	swift build
@@ -38,6 +38,18 @@ check-cask:
 	ruby -c "$$out" > /dev/null; \
 	if grep -n '__' "$$out"; then echo "unrendered placeholder in cask" >&2; exit 1; fi; \
 	echo "cask OK"
+
+# both Focus shortcut names must appear verbatim in the README and the setup guide,
+# and the README must link the guide (the app links to it too)
+FOCUS_DOCS := README.md docs/focus-shortcuts.md
+check-docs:
+	@set -e; for f in $(FOCUS_DOCS); do \
+	  for name in "Pomodoro Focus On" "Pomodoro Focus Off"; do \
+	    grep -qF "$$name" "$$f" || { echo "$$f does not mention \"$$name\"" >&2; exit 1; }; \
+	  done; \
+	done; \
+	grep -qF "docs/focus-shortcuts.md" README.md || { echo "README.md does not link docs/focus-shortcuts.md" >&2; exit 1; }; \
+	echo "docs OK"
 
 clean:
 	swift package clean

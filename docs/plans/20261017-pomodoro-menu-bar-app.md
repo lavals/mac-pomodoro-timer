@@ -430,11 +430,11 @@ struct FocusController {
 - Modify: `Sources/PomodoroCore/Views/FocusSetupView.swift` (link to the doc)
 - Modify: `Makefile` (add `check-docs`)
 
-- [ ] write `README.md`: what it is, screenshot placeholder, install (`brew tap lavals/tap && brew install pomodoro`), why the cask strips quarantine and the expected "signer changed" warning on upgrade, Apple Silicon only, upgrade, build from source (`make run`), release process (bump `VERSION`, tag `vX.Y.Z`, push)
-- [ ] write `docs/focus-shortcuts.md`: exact steps to create `Pomodoro Focus On` / `Pomodoro Focus Off` with the Set Focus action, choosing Do Not Disturb vs a custom Pomodoro Focus, enabling Share Across Devices, verifying with `shortcuts list`
-- [ ] link the doc from `FocusSetupView` and README
-- [ ] add `make check-docs` (grep both shortcut names in README and the doc) and add it to `ci.yml`
-- [ ] run `make check-docs` and `make test` - must pass before task 14
+- [x] write `README.md`: what it is, screenshot placeholder, install (`brew tap lavals/tap && brew install pomodoro`), why the cask strips quarantine and the expected "signer changed" warning on upgrade, Apple Silicon only, upgrade, build from source (`make run`), release process (bump `VERSION`, tag `vX.Y.Z`, push)
+- [x] write `docs/focus-shortcuts.md`: exact steps to create `Pomodoro Focus On` / `Pomodoro Focus Off` with the Set Focus action, choosing Do Not Disturb vs a custom Pomodoro Focus, enabling Share Across Devices, verifying with `shortcuts list`
+- [x] link the doc from `FocusSetupView` and README (`FocusSetupView.guideURL` already pointed at `docs/focus-shortcuts.md` since task 10; README links it)
+- [x] add `make check-docs` (grep both shortcut names in README and the doc) and add it to `ci.yml`
+- [x] run `make check-docs` and `make test` - must pass before task 14
 
 ### Task 14: Verify acceptance criteria
 - [ ] verify all requirements from Overview are implemented: configurable durations, hideable countdown, Focus on/off around work (including after pause/resume), chime-then-wait, right-click menu, settings window, launch at login, dark mode
