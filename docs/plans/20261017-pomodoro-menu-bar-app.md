@@ -145,6 +145,7 @@ struct FocusController {
 }
 ```
 - `ProcessShellRunner` wraps `Foundation.Process` running `/usr/bin/shortcuts`; it **drains stdout and stderr concurrently** (`readabilityHandler` or background reads) before `waitUntilExit`, and enforces the timeout with `terminate()`. Calling `readDataToEndOfFile` after `waitUntilExit` can deadlock on large output.
+- runner failures are thrown as `ShellError` (`.timeout`, `.launchFailed(String)`); `setFocus` maps `.timeout` → `FocusError.timeout` and any launch failure → `.notInstalled`. `setFocus` takes an optional `timeout:` (default 5s) so `prepareForTermination` can pass 2s
 - all shell calls run **off the main actor**; the coordinator awaits them. The only synchronous shell call is in `prepareForTermination`, with a short timeout.
 
 ### App layer (`Sources/PomodoroCore/App/`)
@@ -287,13 +288,13 @@ struct FocusController {
 - Create: `Tests/PomodoroCoreTests/FocusControllerTests.swift`
 - Create: `Tests/PomodoroCoreTests/ProcessShellRunnerTests.swift`
 
-- [ ] implement `ProcessShellRunner` (async, pipes drained concurrently, timeout → `terminate()`)
-- [ ] implement `FocusController.availability()` parsing `shortcuts list` output (trim, exact match on both names)
-- [ ] implement `setFocus(_:)` returning `.failure(.notInstalled / .failed / .timeout)` without throwing
-- [ ] write tests with `FakeShellRunner`: both names present → `.available`; one missing → `.missing(["Pomodoro Focus Off"])`; list fails → `.error`
-- [ ] write tests for `setFocus` success, non-zero exit with stderr captured, and timeout mapping
-- [ ] write tests for `ProcessShellRunner` against `/bin/sh -c` (captures stdout and stderr, non-zero status, large output of 1 MB does not deadlock, `sleep 5` with 0.2s timeout returns `.timeout`)
-- [ ] run `make test` - must pass before task 6
+- [x] implement `ProcessShellRunner` (async, pipes drained concurrently, timeout → `terminate()`)
+- [x] implement `FocusController.availability()` parsing `shortcuts list` output (trim, exact match on both names)
+- [x] implement `setFocus(_:)` returning `.failure(.notInstalled / .failed / .timeout)` without throwing
+- [x] write tests with `FakeShellRunner`: both names present → `.available`; one missing → `.missing(["Pomodoro Focus Off"])`; list fails → `.error`
+- [x] write tests for `setFocus` success, non-zero exit with stderr captured, and timeout mapping
+- [x] write tests for `ProcessShellRunner` against `/bin/sh -c` (captures stdout and stderr, non-zero status, large output of 1 MB does not deadlock, `sleep 5` with 0.2s timeout returns `.timeout`)
+- [x] run `make test` - must pass before task 6
 
 ### Task 6: Timer coordinator with alerts and effect execution
 
