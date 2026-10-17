@@ -4,6 +4,7 @@ import Foundation
 /// so a running session survives quitting and relaunching the app.
 public final class SessionStore {
     static let key = "sessionState"
+    static let focusKey = "focusTurnedOn"
 
     private let defaults: UserDefaults
 
@@ -23,8 +24,10 @@ public final class SessionStore {
         return try? JSONDecoder().decode(TimerState.self, from: data)
     }
 
-    /// Removes the saved state.
-    public func clear() {
-        defaults.removeObject(forKey: Self.key)
+    /// Whether the app ran the Focus On shortcut and has not turned Focus off since. Saved next
+    /// to the state so a relaunch knows whether Focus Off is the app's to run.
+    public var focusTurnedOn: Bool {
+        get { defaults.bool(forKey: Self.focusKey) }
+        set { defaults.set(newValue, forKey: Self.focusKey) }
     }
 }

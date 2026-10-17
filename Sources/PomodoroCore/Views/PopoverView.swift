@@ -9,8 +9,8 @@ public struct PopoverView: View {
 
     public init(
         coordinator: TimerCoordinator,
-        openSettings: @escaping () -> Void = {},
-        openFocusSetup: @escaping () -> Void = {}
+        openSettings: @escaping () -> Void,
+        openFocusSetup: @escaping () -> Void
     ) {
         self.coordinator = coordinator
         self.openSettings = openSettings
@@ -23,12 +23,12 @@ public struct PopoverView: View {
             ZStack {
                 ProgressRing(
                     progress: coordinator.progress,
-                    tint: TimerPresentation.ringTint(for: state).color
+                    tint: Color(nsColor: TimerPresentation.tint(for: state))
                 )
                 VStack(spacing: 2) {
                     Text(coordinator.displayTime)
                         .font(.system(size: 40, weight: .light, design: .rounded).monospacedDigit())
-                    Text(coordinator.phaseLabel)
+                    Text(TimerPresentation.phaseLabel(for: state))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -38,7 +38,7 @@ public struct PopoverView: View {
             Button {
                 coordinator.performPrimaryAction()
             } label: {
-                Text(coordinator.primaryAction.title)
+                Text(TimerPresentation.primaryAction(for: state).title)
                     .frame(minWidth: 110)
             }
             .buttonStyle(.borderedProminent)
@@ -51,7 +51,7 @@ public struct PopoverView: View {
                 Color.clear.frame(width: 20, height: 1)
                 Spacer()
                 if let secondary = TimerPresentation.secondaryAction(for: state) {
-                    Button(secondary.title) { perform(secondary) }
+                    Button(secondary.title) { coordinator.perform(secondary) }
                         .buttonStyle(.borderless)
                 }
                 Spacer()
@@ -66,9 +66,8 @@ public struct PopoverView: View {
             }
             .frame(height: 20)
 
-            if Self.showsFocusHint(coordinator.focusAvailability) {
-                FocusHintView(availability: coordinator.focusAvailability, openSetup: openFocusSetup)
-            }
+            // renders nothing until a check finds the shortcuts missing or failing
+            FocusHintView(availability: coordinator.focusAvailability, openSetup: openFocusSetup)
 
             if let error = coordinator.lastFocusError {
                 Text(error)
@@ -81,17 +80,5 @@ public struct PopoverView: View {
         .padding(16)
         .frame(width: 240)
         .frame(minHeight: 280)
-    }
-
-    private func perform(_ action: SecondaryAction) {
-        switch action {
-        case .skip: coordinator.skip()
-        case .reset: coordinator.reset()
-        }
-    }
-
-    /// The Focus hint shows only once a check found the shortcuts missing or failed.
-    static func showsFocusHint(_ availability: FocusAvailability) -> Bool {
-        FocusHintView.message(for: availability) != nil
     }
 }

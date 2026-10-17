@@ -48,6 +48,11 @@ public final class SystemTicker: Ticker {
 /// Chimes play immediately. Focus calls and notifications run in order on a serial chain of
 /// tasks, so a notification is posted only after the preceding Focus Off finished (Focus would
 /// otherwise swallow it). The timer itself never waits on Focus.
+///
+/// Focus On runs only when both shortcuts exist (re-checked whenever the last check did not
+/// find them). Focus Off runs only when the app turned Focus on itself
+/// (`SessionStore.focusTurnedOn`), whatever the last availability check said, so a failed check
+/// mid-session never leaves Focus on and a Focus the user turned on stays alone.
 @MainActor
 @Observable
 public final class TimerCoordinator {
@@ -70,11 +75,14 @@ public final class TimerCoordinator {
     @ObservationIgnored private var ticker: Ticker?
     @ObservationIgnored private var pendingEffects: Task<Void, Never>?
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
-    @ObservationIgnored private let wakeCenter: NotificationCenter?
+    @ObservationIgnored private let wakeCenter: NotificationCenter
+    @ObservationIgnored private let focusOffRetryDelay: Duration
 
     /// Restores the saved session, saves the reconciled state and performs the restore effects.
     ///
-    /// - Parameter wakeCenter: where `NSWorkspace.didWakeNotification` is observed; nil disables it.
+    /// - Parameters:
+    ///   - wakeCenter: where `NSWorkspace.didWakeNotification` is observed.
+    ///   - focusOffRetryDelay: pause before the one retry of a failed Focus Off.
     public init(
         now clock: @escaping () -> Date = Date.init,
         preferences: Preferences,
@@ -82,7 +90,8 @@ public final class TimerCoordinator {
         focus: FocusController,
         alerts: Alerts,
         makeTicker: @escaping TickerFactory = { SystemTicker(fire: $0) },
-        wakeCenter: NotificationCenter? = NSWorkspace.shared.notificationCenter
+        wakeCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+        focusOffRetryDelay: Duration = .seconds(2)
     ) {
         self.clock = clock
         self.preferences = preferences
@@ -91,13 +100,14 @@ public final class TimerCoordinator {
         self.alerts = alerts
         self.makeTicker = makeTicker
         self.wakeCenter = wakeCenter
+        self.focusOffRetryDelay = focusOffRetryDelay
         let launchTime = clock()
         now = launchTime
         let (restored, effects) = TimerEngine.restore(sessionStore.load(), now: launchTime)
         engine = restored
         apply(effects)
 
-        wakeObserver = wakeCenter?.addObserver(
+        wakeObserver = wakeCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
@@ -106,7 +116,7 @@ public final class TimerCoordinator {
 
     isolated deinit {
         ticker?.invalidate()
-        if let wakeObserver { wakeCenter?.removeObserver(wakeObserver) }
+        if let wakeObserver { wakeCenter.removeObserver(wakeObserver) }
     }
 
     // MARK: derived state
@@ -126,10 +136,6 @@ public final class TimerCoordinator {
 
     /// Elapsed fraction of the current phase in 0...1.
     public var progress: Double { engine.progress(now: now) }
-
-    public var phaseLabel: String { TimerPresentation.phaseLabel(for: engine.state) }
-
-    public var primaryAction: PrimaryAction { TimerPresentation.primaryAction(for: engine.state) }
 
     // MARK: actions
 
@@ -164,6 +170,18 @@ public final class TimerCoordinator {
         preferences.showCountdown.toggle()
     }
 
+    /// Performs a timer menu entry or popover button. `.settings`, `.quit` and `.separator` are
+    /// app-level entries the caller handles, so they do nothing here.
+    public func perform(_ item: MenuItem) {
+        switch item {
+        case .primary: performPrimaryAction()
+        case .skip: skip()
+        case .reset: reset()
+        case .toggleCountdown: toggleCountdown()
+        case .settings, .quit, .separator: break
+        }
+    }
+
     /// Re-checks whether both Focus shortcuts exist. Returns the task so callers can await it.
     @discardableResult
     public func refreshFocusAvailability() -> Task<Void, Never> {
@@ -173,17 +191,40 @@ public final class TimerCoordinator {
         }
     }
 
-    /// Turns Focus off synchronously before the app quits if a work phase is running.
-    /// Blocks the caller for at most a couple of seconds.
-    public func prepareForTermination() {
-        guard case .running(.work, _, _) = engine.state, focusAvailability == .available else { return }
-        let done = DispatchSemaphore(value: 0)
-        let focus = self.focus
-        Task.detached {
-            _ = await focus.setFocus(false, timeout: 2)
-            done.signal()
+    /// Called before the app quits: lets queued Focus calls finish (at most `chainBudget`), then
+    /// turns Focus off if the app turned it on (at most `offBudget`). Bounded so quitting never
+    /// hangs on a stuck `shortcuts` run.
+    public func prepareForTermination(
+        chainBudget: Duration = .milliseconds(1500),
+        offBudget: Duration = .seconds(2)
+    ) async {
+        if let pendingEffects {
+            _ = await Self.value(of: pendingEffects, within: chainBudget)
         }
-        _ = done.wait(timeout: .now() + 2.5)
+        guard sessionStore.focusTurnedOn else { return }
+        let focus = self.focus
+        let off = Task.detached {
+            await focus.setFocus(false, timeout: offBudget / .seconds(1))
+        }
+        if case .success = await Self.value(of: off, within: offBudget) {
+            sessionStore.focusTurnedOn = false
+        }
+    }
+
+    /// The task's value, or nil if it did not finish within `budget`. The task keeps running.
+    private static func value<T: Sendable>(of task: Task<T, Never>, within budget: Duration) async -> T? {
+        await withCheckedContinuation { continuation in
+            let once = ResumeOnce(continuation)
+            let timer = Task {
+                try? await Task.sleep(for: budget)
+                once.resume(nil)
+            }
+            Task {
+                let value = await task.value
+                timer.cancel()
+                once.resume(value)
+            }
+        }
     }
 
     /// Waits until every queued Focus call and notification has been performed.
@@ -231,13 +272,42 @@ public final class TimerCoordinator {
         }
     }
 
-    /// Runs a Focus shortcut when both exist. The first call after launch checks availability.
     private func setFocus(_ on: Bool) async {
-        if focusAvailability == .unknown {
+        if on { await turnFocusOn() } else { await turnFocusOff() }
+    }
+
+    /// Runs Focus On when both shortcuts exist, re-checking unless the last check found them.
+    private func turnFocusOn() async {
+        if focusAvailability != .available {
             focusAvailability = await focus.availability()
         }
         guard focusAvailability == .available else { return }
-        switch await focus.setFocus(on) {
+        // marked before the run so a quit while it is in flight still turns Focus off
+        sessionStore.focusTurnedOn = true
+        let result = await focus.setFocus(true)
+        // a timed-out run may still have switched Focus on; any other failure did not
+        if case .failure(let error) = result, error != .timeout {
+            sessionStore.focusTurnedOn = false
+        }
+        record(result)
+    }
+
+    /// Runs Focus Off if the app turned Focus on, retrying once after a failure.
+    private func turnFocusOff() async {
+        guard sessionStore.focusTurnedOn else { return }
+        var result = await focus.setFocus(false)
+        if case .failure = result {
+            try? await Task.sleep(for: focusOffRetryDelay)
+            result = await focus.setFocus(false)
+        }
+        if case .success = result {
+            sessionStore.focusTurnedOn = false
+        }
+        record(result)
+    }
+
+    private func record(_ result: Result<Void, FocusError>) {
+        switch result {
         case .success: lastFocusError = nil
         case .failure(let error): lastFocusError = TimerPresentation.focusErrorMessage(error)
         }
@@ -251,5 +321,23 @@ public final class TimerCoordinator {
             ticker?.invalidate()
             ticker = nil
         }
+    }
+}
+
+/// Resumes a continuation once; later calls are ignored.
+private final class ResumeOnce<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T?, Never>?
+
+    init(_ continuation: CheckedContinuation<T?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ value: T?) {
+        let pending = lock.withLock {
+            defer { continuation = nil }
+            return continuation
+        }
+        pending?.resume(returning: value)
     }
 }

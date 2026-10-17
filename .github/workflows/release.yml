@@ -51,18 +51,27 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "$ZIP sha256 $SHA"
 
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ZIP: ${{ steps.package.outputs.zip }}
-        run: gh release create "$GITHUB_REF_NAME" "$ZIP" --generate-notes
-
+      # checked out before publishing, so a missing or expired TAP_GITHUB_TOKEN (or a tap
+      # without any commit) fails the run before anything is released
       - name: Check out tap
         uses: actions/checkout@v5
         with:
           repository: lavals/homebrew-tap
           token: ${{ secrets.TAP_GITHUB_TOKEN }}
           path: tap
+
+      # re-running a failed release replaces the asset instead of failing on the existing release;
+      # the cask's sha256 is the zip uploaded here either way
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$ZIP" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$ZIP" --generate-notes
+          fi
 
       - name: Update cask in tap
         env:

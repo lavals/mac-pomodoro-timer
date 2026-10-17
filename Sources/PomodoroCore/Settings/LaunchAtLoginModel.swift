@@ -33,6 +33,7 @@ public struct SMAppServiceLoginService: LoginService {
 public final class LaunchAtLoginModel {
     static let approvalMessage = "Allow Pomodoro in System Settings > General > Login Items."
     static let unbundledMessage = "Launch at login works only in the installed app."
+    static let notEnabledMessage = "macOS did not enable launch at login. Check System Settings > General > Login Items."
 
     /// Whether the app is registered and allowed to launch at login.
     public private(set) var isEnabled = false
@@ -98,6 +99,9 @@ public final class LaunchAtLoginModel {
         isEnabled = status == .enabled
         if enabled, status == .requiresApproval {
             requestApproval()
+        } else if enabled, status != .enabled {
+            // registering "succeeded" but the item is not there (e.g. `.notFound`)
+            message = Self.notEnabledMessage
         } else {
             message = nil
         }

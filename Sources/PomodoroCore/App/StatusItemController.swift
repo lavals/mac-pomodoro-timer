@@ -8,10 +8,23 @@ import SwiftUI
 public final class StatusItemController: NSObject, NSMenuDelegate {
     private let coordinator: TimerCoordinator
     private let statusItem: NSStatusItem
-    private let popover: NSPopover
     private let openSettings: () -> Void
+    private let openFocusSetup: () -> Void
+    private var renderer: StatusButtonRenderer?
     /// Menu entries behind each item's tag, rebuilt every time the menu opens.
     private var shownItems: [MenuItem] = []
+
+    private lazy var popover: NSPopover = Self.makePopover(
+        coordinator: coordinator,
+        openSettings: { [weak self] in
+            self?.popover.performClose(nil)
+            self?.openSettings()
+        },
+        openFocusSetup: { [weak self] in
+            self?.popover.performClose(nil)
+            self?.openFocusSetup()
+        }
+    )
 
     /// - Parameters:
     ///   - openSettings: shows the settings window (menu item and popover gear button).
@@ -19,60 +32,22 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
     public init(
         coordinator: TimerCoordinator,
         openSettings: @escaping () -> Void,
-        openFocusSetup: @escaping () -> Void = {}
+        openFocusSetup: @escaping () -> Void
     ) {
         self.coordinator = coordinator
         self.openSettings = openSettings
+        self.openFocusSetup = openFocusSetup
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        let popover = NSPopover()
-        self.popover = popover
         super.init()
-        Self.configure(
-            popover,
-            coordinator: coordinator,
-            openSettings: { [weak popover] in
-                popover?.performClose(nil)
-                openSettings()
-            },
-            openFocusSetup: { [weak popover] in
-                popover?.performClose(nil)
-                openFocusSetup()
-            }
-        )
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(handleClick(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.toolTip = "Pomodoro"
+            let renderer = StatusButtonRenderer(button: button, coordinator: coordinator)
+            renderer.start()
+            self.renderer = renderer
         }
-        track()
-    }
-
-    // MARK: rendering
-
-    /// Renders while recording which coordinator properties were read, and re-registers on the
-    /// next change. `onChange` fires once, before the change lands, so hop to main and re-read.
-    private func track() {
-        withObservationTracking {
-            render()
-        } onChange: { [weak self] in
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated { self?.track() }
-            }
-        }
-    }
-
-    private func render() {
-        guard let button = statusItem.button else { return }
-        let state = coordinator.state
-        let showCountdown = coordinator.preferences.showCountdown
-        button.image = StatusGlyph.image(spec: GlyphSpec.make(state: state, progress: coordinator.progress))
-        button.attributedTitle = StatusTitle.make(
-            time: coordinator.displayTime,
-            phase: StatusTitle.phase(for: state),
-            showCountdown: showCountdown
-        )
-        button.imagePosition = showCountdown ? .imageLeading : .imageOnly
     }
 
     // MARK: clicks
@@ -126,42 +101,29 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func menuItemChosen(_ sender: NSMenuItem) {
         guard shownItems.indices.contains(sender.tag) else { return }
         switch shownItems[sender.tag] {
-        case .primary: coordinator.performPrimaryAction()
-        case .skip: coordinator.skip()
-        case .reset: coordinator.reset()
-        case .toggleCountdown: coordinator.toggleCountdown()
         case .settings: openSettings()
         case .quit: NSApp.terminate(nil)
-        case .separator: break
+        case let item: coordinator.perform(item)
         }
     }
 
     /// A transient popover hosting `PopoverView`, sized by the view's own preferred size.
     static func makePopover(
         coordinator: TimerCoordinator,
-        openSettings: @escaping () -> Void = {},
-        openFocusSetup: @escaping () -> Void = {}
-    ) -> NSPopover {
-        let popover = NSPopover()
-        configure(popover, coordinator: coordinator, openSettings: openSettings, openFocusSetup: openFocusSetup)
-        return popover
-    }
-
-    private static func configure(
-        _ popover: NSPopover,
-        coordinator: TimerCoordinator,
         openSettings: @escaping () -> Void,
         openFocusSetup: @escaping () -> Void
-    ) {
+    ) -> NSPopover {
         let hosting = NSHostingController(rootView: PopoverView(
             coordinator: coordinator,
             openSettings: openSettings,
             openFocusSetup: openFocusSetup
         ))
         hosting.sizingOptions = .preferredContentSize
+        let popover = NSPopover()
         popover.behavior = .transient
         popover.animates = true
         popover.contentViewController = hosting
+        return popover
     }
 
     /// Builds the right-click menu. Each item's tag is its index in `items`.
@@ -183,5 +145,47 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
             menu.addItem(menuItem)
         }
         return menu
+    }
+}
+
+/// Keeps the status item's button in sync with the coordinator: glyph, countdown title and
+/// image position. Works on any `NSButton`, so tests need no real status item.
+@MainActor
+final class StatusButtonRenderer {
+    private let button: NSButton
+    private let coordinator: TimerCoordinator
+
+    init(button: NSButton, coordinator: TimerCoordinator) {
+        self.button = button
+        self.coordinator = coordinator
+    }
+
+    /// Renders now and again after every change of what the last render read.
+    func start() {
+        track()
+    }
+
+    /// Renders while recording which coordinator properties were read, and re-registers on the
+    /// next change. `onChange` fires once, before the change lands, so hop to main and re-read.
+    private func track() {
+        withObservationTracking {
+            render()
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.track() }
+            }
+        }
+    }
+
+    private func render() {
+        let state = coordinator.state
+        let showCountdown = coordinator.preferences.showCountdown
+        button.image = StatusGlyph.image(spec: GlyphSpec.make(state: state, progress: coordinator.progress))
+        button.attributedTitle = StatusTitle.make(
+            time: coordinator.displayTime,
+            tint: TimerPresentation.tint(for: state),
+            showCountdown: showCountdown
+        )
+        button.imagePosition = showCountdown ? .imageLeading : .imageOnly
     }
 }

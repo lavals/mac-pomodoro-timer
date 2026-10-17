@@ -111,6 +111,11 @@ private let restoreTable: [RestoreCase] = [
     // still running: reconcile Focus for work, nothing for rest
     .init(saved: runningWork, state: runningWork, effects: [.focusOn]),
     .init(saved: runningRest, state: runningRest, effects: []),
+    // end date more than a phase ahead (clock moved backwards): pulled in to a full phase
+    .init(saved: .running(phase: .work, endDate: t0.addingTimeInterval(10_000), total: 1500),
+          state: .running(phase: .work, endDate: t0.addingTimeInterval(1500), total: 1500), effects: [.focusOn]),
+    .init(saved: .running(phase: .rest, endDate: t0.addingTimeInterval(900), total: 300),
+          state: .running(phase: .rest, endDate: t0.addingTimeInterval(300), total: 300), effects: []),
     // everything else restores as saved
     .init(saved: nil, state: .idle, effects: []),
     .init(saved: .idle, state: .idle, effects: []),

@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// What the main button does in the current state.
 public enum PrimaryAction: Equatable, Sendable {
@@ -12,28 +12,6 @@ public enum PrimaryAction: Equatable, Sendable {
         case .pause: return "Pause"
         }
     }
-}
-
-/// The popover's text button under the primary one.
-public enum SecondaryAction: Equatable, Sendable {
-    case skip, reset
-
-    public var title: String {
-        switch self {
-        case .skip: return "Skip"
-        case .reset: return "Reset"
-        }
-    }
-}
-
-/// Semantic tint for the progress ring and menu bar title; views map it to a system color.
-public enum RingTint: Equatable, Sendable {
-    /// `controlAccentColor`: a work phase.
-    case accent
-    /// `systemGreen`: a rest phase.
-    case green
-    /// `secondaryLabelColor`: nothing in progress.
-    case secondary
 }
 
 /// One entry of the status item's right-click menu.
@@ -70,13 +48,10 @@ public enum TimerPresentation {
         }
     }
 
-    public static func primaryActionTitle(for state: TimerState) -> String {
-        primaryAction(for: state).title
-    }
-
-    /// The popover's secondary button: `Skip` while a phase is running or paused, `Reset` once it
-    /// finished, none when idle. (The right-click menu offers both while in progress.)
-    public static func secondaryAction(for state: TimerState) -> SecondaryAction? {
+    /// The popover's text button under the primary one: `Skip` while a phase is running or
+    /// paused, `Reset` once it finished, none when idle. (The right-click menu offers both while
+    /// in progress.)
+    public static func secondaryAction(for state: TimerState) -> MenuItem? {
         switch state {
         case .running, .paused: return .skip
         case .finished: return .reset
@@ -93,11 +68,13 @@ public enum TimerPresentation {
         }
     }
 
-    public static func ringTint(for state: TimerState) -> RingTint {
+    /// Tint of the progress ring and the menu bar countdown: the accent color for work, green
+    /// for a break, secondary label color when nothing is in progress.
+    public static func tint(for state: TimerState) -> NSColor {
         switch state {
-        case .running(.work, _, _), .paused(.work, _, _): return .accent
-        case .running(.rest, _, _), .paused(.rest, _, _): return .green
-        case .idle, .finished: return .secondary
+        case .running(.work, _, _), .paused(.work, _, _): return .controlAccentColor
+        case .running(.rest, _, _), .paused(.rest, _, _): return .systemGreen
+        case .idle, .finished: return .secondaryLabelColor
         }
     }
 
@@ -116,8 +93,8 @@ public enum TimerPresentation {
     /// One-line explanation of a failed Focus call for the popover.
     public static func focusErrorMessage(_ error: FocusError) -> String {
         switch error {
-        case .notInstalled:
-            return "Couldn't run the shortcuts tool"
+        case .launchFailed(let message):
+            return "Couldn't run the shortcuts tool: \(message)"
         case .timeout:
             return "Focus shortcut timed out"
         case .failed(let status, let stderr):

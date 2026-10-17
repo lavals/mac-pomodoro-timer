@@ -67,14 +67,13 @@ private let everyState: [TimerState] = [
         #expect(SessionStore(defaults: testDefaults.defaults).load() == nil)
     }
 
-    @Test func clearRemovesSavedState() {
+    @Test func focusTurnedOnDefaultsToFalseAndPersists() {
         let testDefaults = TestDefaults()
         defer { testDefaults.cleanUp() }
-        let store = SessionStore(defaults: testDefaults.defaults)
+        #expect(SessionStore(defaults: testDefaults.defaults).focusTurnedOn == false)
 
-        store.save(.paused(phase: .work, remaining: 10, total: 1500))
-        store.clear()
+        SessionStore(defaults: testDefaults.defaults).focusTurnedOn = true
 
-        #expect(store.load() == nil)
+        #expect(SessionStore(defaults: testDefaults.defaults).focusTurnedOn)
     }
 }

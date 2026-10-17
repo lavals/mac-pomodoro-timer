@@ -10,8 +10,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificat
 
     public private(set) var coordinator: TimerCoordinator?
     private var statusItemController: StatusItemController?
-    private var settingsWindowController: SettingsWindowController?
-    private var focusSetupWindowController: FocusSetupWindowController?
+    private var settingsWindowController: HostedWindowController?
+    private var focusSetupWindowController: HostedWindowController?
 
     override public init() {
         super.init()
@@ -32,9 +32,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificat
             alerts: SystemAlerts()
         )
         self.coordinator = coordinator
-        let settings = SettingsWindowController(preferences: preferences, launchAtLogin: LaunchAtLoginModel())
+        let settings = HostedWindowController.settings(preferences: preferences, launchAtLogin: LaunchAtLoginModel())
         settingsWindowController = settings
-        let focusSetup = FocusSetupWindowController(coordinator: coordinator)
+        let focusSetup = HostedWindowController.focusSetup(coordinator: coordinator)
         focusSetupWindowController = focusSetup
         statusItemController = StatusItemController(
             coordinator: coordinator,
@@ -43,8 +43,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificat
         )
     }
 
-    public func applicationWillTerminate(_ notification: Notification) {
-        coordinator?.prepareForTermination()
+    /// Opening the app again from Finder or Spotlight while it runs shows the settings window:
+    /// the app has no Dock icon and the status item may be hidden behind the notch.
+    public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { settingsWindowController?.show() }
+        return false
+    }
+
+    /// Defers quitting until queued Focus calls finished and Focus is off again (bounded, see
+    /// `TimerCoordinator.prepareForTermination`).
+    public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let coordinator else { return .terminateNow }
+        Task {
+            await coordinator.prepareForTermination()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     nonisolated public func userNotificationCenter(

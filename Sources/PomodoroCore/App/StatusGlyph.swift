@@ -33,7 +33,7 @@ public enum StatusGlyph {
         let start: CGFloat = 90
         let end = start - CGFloat(spec.arc) * 360
         switch spec.style {
-        case .filled, .dimmed:
+        case .filled:
             let wedge = NSBezierPath()
             wedge.move(to: center)
             wedge.appendArc(withCenter: center, radius: radius, startAngle: start, endAngle: end, clockwise: true)
@@ -46,6 +46,8 @@ public enum StatusGlyph {
             arc.lineWidth = lineWidth + 0.5
             arc.lineCapStyle = .round
             arc.stroke()
+        case .dimmed:
+            break // always has a zero arc and returned above
         }
     }
 }

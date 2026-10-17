@@ -1,4 +1,4 @@
-// swift-tools-version:5.10
+// swift-tools-version:6.2
 import PackageDescription
 
 let package = Package(
@@ -13,5 +13,6 @@ let package = Package(
         .executableTarget(name: "Pomodoro", dependencies: ["PomodoroCore"]),
         .testTarget(name: "PomodoroCoreTests", dependencies: ["PomodoroCore"]),
     ],
-    swiftLanguageVersions: [.v5]
+    // Swift 5 language mode on a Swift 6.2+ toolchain (isolated deinit needs the 6.2 compiler)
+    swiftLanguageModes: [.v5]
 )

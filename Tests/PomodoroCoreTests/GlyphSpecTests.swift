@@ -33,12 +33,6 @@ private let glyphTable: [GlyphCase] = [
         #expect(GlyphSpec.make(state: row.state, progress: row.progress) == row.expected)
     }
 
-    @Test func clampsProgress() {
-        let running = TimerState.running(phase: .work, endDate: end, total: 1500)
-        #expect(GlyphSpec.make(state: running, progress: 1.4).arc == 1)
-        #expect(GlyphSpec.make(state: running, progress: -0.2).arc == 0)
-    }
-
     @Test(arguments: glyphTable)
     func rendersTemplateImage(_ row: GlyphCase) {
         let image = StatusGlyph.image(spec: row.expected)

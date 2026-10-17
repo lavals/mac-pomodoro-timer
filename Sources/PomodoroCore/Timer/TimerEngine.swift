@@ -14,15 +14,19 @@ public struct TimerEngine: Equatable, Sendable {
     ///
     /// A running phase whose end date passed while the app was not running finishes silently
     /// (no chime or notification), turning Focus off if it was a work phase. A work phase still
-    /// in the future turns Focus back on so the system matches the timer. Everything else is
-    /// restored as saved; nil restores idle.
+    /// in the future turns Focus back on so the system matches the timer; if its end date lies
+    /// more than a full phase ahead (the clock moved backwards), it is pulled in to `now + total`.
+    /// Everything else is restored as saved; nil restores idle.
     public static func restore(_ saved: TimerState?, now: Date) -> (TimerEngine, [Effect]) {
         guard let saved else { return (TimerEngine(), []) }
         switch saved {
         case .running(let phase, let endDate, _) where endDate <= now:
             return (TimerEngine(state: .finished(phase: phase)), phase == .work ? [.focusOff] : [])
-        case .running(.work, _, _):
-            return (TimerEngine(state: saved), [.focusOn])
+        case .running(let phase, let endDate, let total):
+            let clamped = TimerState.running(
+                phase: phase, endDate: min(endDate, now.addingTimeInterval(total)), total: total
+            )
+            return (TimerEngine(state: clamped), phase == .work ? [.focusOn] : [])
         default:
             return (TimerEngine(state: saved), [])
         }

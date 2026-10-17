@@ -125,6 +125,46 @@ final class FakeLoginService: LoginService {
         #expect(model.isEnabled)
     }
 
+    @Test(arguments: [SMAppService.Status.notFound, .notRegistered])
+    func registerThatLeavesTheItemDisabledExplainsIt(_ after: SMAppService.Status) {
+        let service = FakeLoginService()
+        service.statusAfterRegister = after
+        var opened = 0
+        let model = LaunchAtLoginModel(service: service, isBundled: true) { opened += 1 }
+        model.setEnabled(true)
+        #expect(service.calls == ["register"])
+        #expect(!model.isEnabled)
+        #expect(model.message == LaunchAtLoginModel.notEnabledMessage)
+        #expect(opened == 0)
+    }
+
+    @Test func refreshClearsAnEarlierError() {
+        let service = FakeLoginService()
+        service.error = FakeLoginService.Failure()
+        let model = LaunchAtLoginModel(service: service, isBundled: true)
+        model.setEnabled(true)
+        #expect(model.message == "Operation not permitted")
+
+        model.refresh()
+
+        #expect(model.message == nil)
+        #expect(!model.isEnabled)
+    }
+
+    @Test func refreshNoticesApprovalWithdrawnInSystemSettings() {
+        let service = FakeLoginService(status: .enabled)
+        var opened = 0
+        let model = LaunchAtLoginModel(service: service, isBundled: true) { opened += 1 }
+        #expect(model.isEnabled)
+
+        service.status = .requiresApproval
+        model.refresh()
+
+        #expect(!model.isEnabled)
+        #expect(model.message == LaunchAtLoginModel.approvalMessage)
+        #expect(opened == 0)
+    }
+
     @Test func unbundledIsUnavailableAndNeverCallsTheService() {
         let service = FakeLoginService(status: .enabled)
         let model = LaunchAtLoginModel(service: service, isBundled: false)
@@ -142,11 +182,11 @@ final class FakeLoginService: LoginService {
     @Test func windowIsReusableTitledAndFixedSize() {
         let testDefaults = TestDefaults()
         defer { testDefaults.cleanUp() }
-        let view = SettingsView(
+        let controller = HostedWindowController.settings(
             preferences: Preferences(defaults: testDefaults.defaults),
             launchAtLogin: LaunchAtLoginModel(service: FakeLoginService(), isBundled: false)
         )
-        let window = SettingsWindowController.makeWindow(title: "Pomodoro Settings", rootView: view)
+        let window = controller.window
         #expect(window.title == "Pomodoro Settings")
         #expect(!window.isReleasedWhenClosed)
         #expect(window.styleMask.contains(.titled))
@@ -155,5 +195,21 @@ final class FakeLoginService: LoginService {
         #expect(window.contentView is NSHostingView<SettingsView>)
         #expect(window.contentView?.frame.width == 360)
         #expect(!window.isVisible)
+    }
+
+    @Test func showingTheSettingsWindowRereadsTheLoginItem() {
+        let testDefaults = TestDefaults()
+        defer { testDefaults.cleanUp() }
+        let service = FakeLoginService()
+        let launchAtLogin = LaunchAtLoginModel(service: service, isBundled: true)
+        let controller = HostedWindowController.settings(
+            preferences: Preferences(defaults: testDefaults.defaults),
+            launchAtLogin: launchAtLogin
+        )
+        service.status = .enabled
+
+        controller.onShow()
+
+        #expect(launchAtLogin.isEnabled)
     }
 }

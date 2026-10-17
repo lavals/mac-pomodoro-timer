@@ -10,8 +10,8 @@ public enum FocusAvailability: Equatable, Sendable {
 
 /// Why turning Focus on or off failed.
 public enum FocusError: Error, Equatable, Sendable {
-    /// The `shortcuts` command line tool could not be started.
-    case notInstalled
+    /// The `shortcuts` command line tool could not be started; carries the launch error.
+    case launchFailed(String)
     /// The shortcut ran but exited with a non-zero status.
     case failed(status: Int32, stderr: String)
     /// The shortcut did not finish in time and was terminated.
@@ -70,8 +70,10 @@ public struct FocusController: Sendable {
             return .success(())
         } catch ShellError.timeout {
             return .failure(.timeout)
+        } catch ShellError.launchFailed(let message) {
+            return .failure(.launchFailed(message))
         } catch {
-            return .failure(.notInstalled)
+            return .failure(.launchFailed(error.localizedDescription))
         }
     }
 }

@@ -46,7 +46,11 @@ public struct ProcessShellRunner: ShellRunner {
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
 
+            // entered before launch: a child that exits at once must not let `notify` run
+            // before both readers registered, or the output would be lost
             let readers = DispatchGroup()
+            readers.enter()
+            readers.enter()
             process.terminationHandler = { finished in
                 readers.notify(queue: .global()) {
                     context.finish(.success(ShellResult(
@@ -62,16 +66,16 @@ public struct ProcessShellRunner: ShellRunner {
             } catch {
                 try? stdoutPipe.fileHandleForWriting.close()
                 try? stderrPipe.fileHandleForWriting.close()
+                readers.leave()
+                readers.leave()
                 context.finish(.failure(ShellError.launchFailed(error.localizedDescription)))
                 return
             }
 
-            readers.enter()
             DispatchQueue.global().async {
                 context.stdout = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
                 readers.leave()
             }
-            readers.enter()
             DispatchQueue.global().async {
                 context.stderr = stderrPipe.fileHandleForReading.readDataToEndOfFile()
                 readers.leave()

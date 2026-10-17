@@ -35,7 +35,13 @@ struct Harness {
     ///   - shortcuts: names `shortcuts list` reports.
     ///   - saved: session state saved before launch.
     ///   - savedData: raw bytes stored under the session key before launch (e.g. corrupt data).
-    init(shortcuts: [String] = bothShortcuts, saved: TimerState? = nil, savedData: Data? = nil) {
+    ///   - focusWasOn: whether the previous run left Focus turned on by the app.
+    init(
+        shortcuts: [String] = bothShortcuts,
+        saved: TimerState? = nil,
+        savedData: Data? = nil,
+        focusWasOn: Bool = false
+    ) {
         let log = log
         runner = FakeShellRunner { _, args in
             log.append("shell \(args.joined(separator: " "))")
@@ -47,6 +53,7 @@ struct Harness {
         store = SessionStore(defaults: testDefaults.defaults)
         if let saved { store.save(saved) }
         if let savedData { testDefaults.defaults.set(savedData, forKey: SessionStore.key) }
+        store.focusTurnedOn = focusWasOn
         let clock = clock
         coordinator = TimerCoordinator(
             now: { clock.now },
@@ -55,7 +62,8 @@ struct Harness {
             focus: FocusController(runner: runner),
             alerts: alerts,
             makeTicker: tickers.make,
-            wakeCenter: wakeCenter
+            wakeCenter: wakeCenter,
+            focusOffRetryDelay: .zero
         )
     }
 
@@ -70,6 +78,10 @@ struct Harness {
 
     func settle() async {
         await coordinator.waitForPendingEffects()
+    }
+
+    var primaryAction: PrimaryAction {
+        TimerPresentation.primaryAction(for: coordinator.state)
     }
 }
 
@@ -151,8 +163,8 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.store.load() == .idle)
 
         await h.settle()
-        // start, pause, skip of a paused work phase, then a rest phase (no Focus)
-        #expect(h.focusRuns == [focusOn, focusOff, focusOff])
+        // start, pause; skipping the paused work phase and the rest phase leave Focus alone
+        #expect(h.focusRuns == [focusOn, focusOff])
     }
 
     @Test func pauseThenResumeTurnsFocusBackOn() async {
@@ -167,21 +179,22 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.focusRuns == [focusOn, focusOff, focusOn])
     }
 
-    @Test func performPrimaryActionTogglesBetweenStartAndPause() {
+    @Test func performPrimaryActionTogglesBetweenStartAndPause() async {
         let h = Harness(shortcuts: [])
         defer { h.cleanUp() }
 
         h.coordinator.performPrimaryAction()
-        #expect(h.coordinator.primaryAction == .pause)
+        #expect(h.primaryAction == .pause)
         h.coordinator.performPrimaryAction()
-        #expect(h.coordinator.primaryAction == .resume)
+        #expect(h.primaryAction == .resume)
         h.coordinator.performPrimaryAction()
-        #expect(h.coordinator.primaryAction == .pause)
+        #expect(h.primaryAction == .pause)
+        await h.settle()
     }
 
     // MARK: display
 
-    @Test func displayTimeFollowsTheClockAndNotifiesObservers() {
+    @Test func displayTimeFollowsTheClockAndNotifiesObservers() async {
         let h = Harness(shortcuts: [])
         defer { h.cleanUp() }
         h.coordinator.start()
@@ -200,7 +213,8 @@ private let focusOff = ["run", FocusController.offName]
         #expect(changed.isSet)
         #expect(h.coordinator.displayTime == "23:59")
         #expect(abs(h.coordinator.progress - 61.0 / 1500) < 1e-9)
-        #expect(h.coordinator.phaseLabel == "Focus")
+        #expect(TimerPresentation.phaseLabel(for: h.coordinator.state) == "Focus")
+        await h.settle()
     }
 
     @Test(arguments: [
@@ -224,7 +238,7 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.coordinator.displayTime == "50:00")
     }
 
-    @Test func startUsesTheCurrentPreferenceDurations() {
+    @Test func startUsesTheCurrentPreferenceDurations() async {
         let h = Harness(shortcuts: [])
         defer { h.cleanUp() }
         h.preferences.workMinutes = 1
@@ -239,6 +253,21 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.coordinator.displayTime == "02:00")
         h.coordinator.start()
         #expect(h.coordinator.state == .running(phase: .rest, endDate: t0.addingTimeInterval(180), total: 120))
+        await h.settle()
+    }
+
+    @Test func longestAllowedSessionShowsItsFullLength() async {
+        let h = Harness(shortcuts: [])
+        defer { h.cleanUp() }
+        h.preferences.workMinutes = Preferences.minuteRange.upperBound
+        #expect(h.coordinator.displayTime == "120:00")
+
+        h.coordinator.start()
+        #expect(h.coordinator.displayTime == "120:00")
+        h.clock.advance(1)
+        h.coordinator.tick()
+        #expect(h.coordinator.displayTime == "119:59")
+        await h.settle()
     }
 
     @Test func toggleCountdownFlipsPreference() {
@@ -252,7 +281,7 @@ private let focusOff = ["run", FocusController.offName]
 
     // MARK: ticker
 
-    @Test func tickerRunsOnlyWhileRunning() {
+    @Test func tickerRunsOnlyWhileRunning() async {
         let h = Harness(shortcuts: [])
         defer { h.cleanUp() }
         #expect(h.tickers.tickers.isEmpty)
@@ -266,10 +295,11 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.tickers.active != nil)
         h.coordinator.start() // no-op while running: no second ticker
         #expect(h.tickers.tickers.count == 2)
+        await h.settle()
     }
 
-    @Test func tickerFiringFinishesThePhaseAndStopsTicking() {
-        let h = Harness(shortcuts: [])
+    @Test func tickerFiringFinishesThePhaseAndStopsTicking() async {
+        let h = Harness()
         defer { h.cleanUp() }
         h.coordinator.start()
         let ticker = h.tickers.active
@@ -283,6 +313,9 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.coordinator.state == .finished(phase: .work))
         #expect(h.tickers.active == nil)
         #expect(h.alerts.chimes == [.workEnded])
+        await h.settle()
+        #expect(h.focusRuns == [focusOn, focusOff])
+        #expect(h.alerts.notifications == [.init(title: "Focus finished", body: "Time for a break")])
     }
 
     @Test func finishedPhaseWaitsForTheUserToStartTheNext() async {
@@ -303,7 +336,7 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.alerts.chimes == [.workEnded])
         #expect(h.alerts.notifications.count == 1)
         #expect(h.tickers.active == nil)
-        #expect(h.coordinator.primaryAction == .startBreak)
+        #expect(h.primaryAction == .startBreak)
 
         h.coordinator.start()
         #expect(h.coordinator.state == .running(phase: .rest, endDate: h.clock.now.addingTimeInterval(300), total: 300))
@@ -339,7 +372,7 @@ private let focusOff = ["run", FocusController.offName]
     }
 
     @Test func restoresExpiredWorkSilentlyAndTurnsFocusOff() async {
-        let h = Harness(saved: .running(phase: .work, endDate: t0.addingTimeInterval(-1), total: 1500))
+        let h = Harness(saved: .running(phase: .work, endDate: t0.addingTimeInterval(-1), total: 1500), focusWasOn: true)
         defer { h.cleanUp() }
         await h.settle()
 
@@ -349,6 +382,16 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.alerts.chimes.isEmpty)
         #expect(h.alerts.notifications.isEmpty)
         #expect(h.focusRuns == [focusOff])
+        #expect(h.store.focusTurnedOn == false)
+    }
+
+    @Test func restoresExpiredWorkWithoutTouchingAFocusTheAppDidNotTurnOn() async {
+        let h = Harness(saved: .running(phase: .work, endDate: t0.addingTimeInterval(-1), total: 1500))
+        defer { h.cleanUp() }
+        await h.settle()
+
+        #expect(h.coordinator.state == .finished(phase: .work))
+        #expect(h.runner.calls.isEmpty)
     }
 
     @Test func restoresPausedWithoutResurrectingASession() async {
@@ -387,7 +430,8 @@ private let focusOff = ["run", FocusController.offName]
         await h.settle()
 
         #expect(h.coordinator.focusAvailability == .missing(names: [FocusController.offName]))
-        #expect(h.runner.calls.map(\.args) == [["list"]])
+        // each start re-checks; the pause has no Focus of the app's to turn off
+        #expect(h.runner.calls.map(\.args) == [["list"], ["list"]])
         #expect(h.coordinator.lastFocusError == nil)
         #expect(h.coordinator.state.isRunning)
     }
@@ -409,8 +453,13 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.tickers.active != nil)
 
         h.runner.setHandler { _, _ in ShellResult(status: 0, stdout: "", stderr: "") }
+        // the failed On did not turn Focus on, so pausing leaves Focus alone
         h.coordinator.pause()
         await h.settle()
+        #expect(h.focusRuns == [focusOn])
+        h.coordinator.start()
+        await h.settle()
+        #expect(h.focusRuns == [focusOn, focusOn])
         #expect(h.coordinator.lastFocusError == nil)
     }
 
@@ -479,19 +528,150 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.coordinator.focusAvailability == .available)
     }
 
-    @Test func startWithMissingShortcutsRunsTheTimerWithoutShellCalls() async {
+    @Test func startWithMissingShortcutsRunsTheTimerWithoutRunningAShortcut() async {
         let h = Harness(shortcuts: [FocusController.onName])
         defer { h.cleanUp() }
         await h.coordinator.refreshFocusAvailability().value
-        let checks = h.runner.calls.count
 
         h.coordinator.start()
         await h.settle()
 
-        #expect(h.runner.calls.count == checks)
+        #expect(h.runner.calls.map(\.args) == [["list"], ["list"]])
         #expect(h.coordinator.lastFocusError == nil)
         #expect(h.coordinator.state.isRunning)
         #expect(h.tickers.active != nil)
+    }
+
+    // MARK: Focus Off follows what the app turned on
+
+    @Test func focusOffStillRunsAfterAFailedCheckMidSession() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        let listing = bothShortcuts.joined(separator: "\n")
+        h.coordinator.start()
+        await h.settle()
+
+        // opening the popover runs a check that times out
+        h.runner.setHandler { _, args in
+            if args == ["list"] { throw ShellError.timeout }
+            return ShellResult(status: 0, stdout: "", stderr: "")
+        }
+        await h.coordinator.refreshFocusAvailability().value
+        #expect(h.coordinator.focusAvailability == .error("shortcuts list timed out"))
+
+        h.coordinator.pause()
+        await h.settle()
+        #expect(h.focusRuns == [focusOn, focusOff])
+
+        // the next start re-checks instead of trusting the stale error
+        h.runner.setHandler { _, args in
+            ShellResult(status: 0, stdout: args == ["list"] ? listing : "", stderr: "")
+        }
+        h.coordinator.start()
+        await h.settle()
+        #expect(h.coordinator.focusAvailability == .available)
+        #expect(h.focusRuns == [focusOn, focusOff, focusOn])
+    }
+
+    @Test func startAfterATimedOutCheckRechecksBeforeSkippingFocus() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        let listing = bothShortcuts.joined(separator: "\n")
+        h.runner.setHandler { _, _ in throw ShellError.timeout }
+        await h.coordinator.refreshFocusAvailability().value
+        #expect(h.coordinator.focusAvailability == .error("shortcuts list timed out"))
+
+        h.runner.setHandler { _, args in
+            ShellResult(status: 0, stdout: args == ["list"] ? listing : "", stderr: "")
+        }
+        h.coordinator.start()
+        await h.settle()
+
+        #expect(h.runner.calls.map(\.args).suffix(2) == [["list"], focusOn])
+        #expect(h.store.focusTurnedOn)
+    }
+
+    @Test func shortcutsAppearingMidSessionLeaveTheUsersFocusAlone() async {
+        let h = Harness(shortcuts: [])
+        defer { h.cleanUp() }
+        h.coordinator.start()
+        await h.settle()
+
+        let listing = bothShortcuts.joined(separator: "\n")
+        h.runner.setHandler { _, args in
+            ShellResult(status: 0, stdout: args == ["list"] ? listing : "", stderr: "")
+        }
+        await h.coordinator.refreshFocusAvailability().value
+        #expect(h.coordinator.focusAvailability == .available)
+
+        h.coordinator.skip()
+        await h.settle()
+        #expect(h.focusRuns.isEmpty)
+    }
+
+    @Test func failedFocusOffIsRetriedOnce() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        h.coordinator.start()
+        await h.settle()
+        let offAttempts = Counter()
+        h.runner.setHandler { _, _ in
+            offAttempts.increment() == 1
+                ? ShellResult(status: 1, stdout: "", stderr: "busy")
+                : ShellResult(status: 0, stdout: "", stderr: "")
+        }
+
+        h.coordinator.pause()
+        await h.settle()
+
+        #expect(h.focusRuns == [focusOn, focusOff, focusOff])
+        #expect(h.coordinator.lastFocusError == nil)
+        #expect(h.store.focusTurnedOn == false)
+    }
+
+    @Test func focusOffThatKeepsFailingIsTriedAgainAtQuit() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        h.coordinator.start()
+        await h.settle()
+        h.runner.setHandler { _, _ in ShellResult(status: 1, stdout: "", stderr: "busy") }
+
+        h.coordinator.pause()
+        await h.settle()
+        #expect(h.focusRuns == [focusOn, focusOff, focusOff])
+        #expect(h.coordinator.lastFocusError == "Focus shortcut failed: busy")
+        #expect(h.store.focusTurnedOn)
+
+        h.runner.setHandler { _, _ in ShellResult(status: 0, stdout: "", stderr: "") }
+        await h.coordinator.prepareForTermination()
+        #expect(h.focusRuns == [focusOn, focusOff, focusOff, focusOff])
+        #expect(h.store.focusTurnedOn == false)
+    }
+
+    // MARK: dispatch
+
+    @Test func performDispatchesTimerItems() async {
+        let h = Harness(shortcuts: [])
+        defer { h.cleanUp() }
+
+        h.coordinator.perform(.primary(.startFocus))
+        #expect(h.coordinator.state.isRunning)
+        h.coordinator.perform(.primary(.pause))
+        #expect(h.coordinator.state == .paused(phase: .work, remaining: 1500, total: 1500))
+        h.coordinator.perform(.skip)
+        #expect(h.coordinator.state == .finished(phase: .work))
+        h.coordinator.perform(.reset)
+        #expect(h.coordinator.state == .idle)
+        h.coordinator.perform(.toggleCountdown)
+        #expect(h.preferences.showCountdown == false)
+
+        // app-level entries are the caller's to handle
+        for item in [MenuItem.settings, .quit, .separator] {
+            h.coordinator.perform(item)
+        }
+        #expect(h.coordinator.state == .idle)
+        #expect(h.preferences.showCountdown == false)
+        await h.settle()
     }
 
     // MARK: termination
@@ -502,10 +682,56 @@ private let focusOff = ["run", FocusController.offName]
         h.coordinator.start()
         await h.settle()
 
-        h.coordinator.prepareForTermination()
+        await h.coordinator.prepareForTermination()
 
         #expect(h.focusRuns == [focusOn, focusOff])
         #expect(h.runner.calls.last?.timeout == 2)
+        #expect(h.store.focusTurnedOn == false)
+    }
+
+    @Test func quittingRightAfterRestoreWaitsForFocusOnThenTurnsItOff() async {
+        let running = TimerState.running(phase: .work, endDate: t0.addingTimeInterval(600), total: 1500)
+        let h = Harness(saved: running)
+        defer { h.cleanUp() }
+        #expect(h.coordinator.focusAvailability == .unknown)
+
+        await h.coordinator.prepareForTermination()
+
+        #expect(h.runner.calls.map(\.args) == [["list"], focusOn, focusOff])
+    }
+
+    @Test func quittingRightAfterPauseLetsTheQueuedFocusOffRun() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        h.coordinator.start()
+        await h.settle()
+
+        h.coordinator.pause()
+        await h.coordinator.prepareForTermination()
+
+        #expect(h.focusRuns == [focusOn, focusOff])
+    }
+
+    @Test func prepareForTerminationIsBoundedWhenTheShortcutHangs() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        h.coordinator.start()
+        await h.settle()
+        // the Off run hangs until the test releases it
+        let release = DispatchSemaphore(value: 0)
+        let finished = Flag()
+        h.runner.setHandler { _, _ in
+            release.wait()
+            finished.set()
+            return ShellResult(status: 0, stdout: "", stderr: "")
+        }
+
+        await h.coordinator.prepareForTermination(chainBudget: .milliseconds(100), offBudget: .milliseconds(300))
+
+        #expect(!finished.isSet)
+        #expect(h.focusRuns == [focusOn, focusOff])
+        #expect(h.store.focusTurnedOn)
+        release.signal()
     }
 
     @Test(arguments: [
@@ -519,9 +745,42 @@ private let focusOff = ["run", FocusController.offName]
         defer { h.cleanUp() }
         await h.coordinator.refreshFocusAvailability().value
 
-        h.coordinator.prepareForTermination()
+        await h.coordinator.prepareForTermination()
 
         #expect(h.focusRuns.isEmpty)
+    }
+
+    @Test(arguments: [
+        [FocusController.onName],
+        nil, // `shortcuts list` fails
+    ])
+    func prepareForTerminationLeavesFocusAloneWhenTheAppNeverTurnedItOn(shortcuts: [String]?) async {
+        let h = Harness(shortcuts: shortcuts ?? [])
+        defer { h.cleanUp() }
+        if shortcuts == nil {
+            h.runner.setHandler { _, _ in ShellResult(status: 1, stdout: "", stderr: "list failed") }
+        }
+        h.coordinator.start()
+        await h.settle()
+        #expect(h.coordinator.focusAvailability != .available)
+
+        await h.coordinator.prepareForTermination()
+
+        #expect(h.focusRuns.isEmpty)
+    }
+}
+
+/// Thread-safe call counter for scripted shell handlers.
+final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    /// Increments and returns the new value.
+    func increment() -> Int {
+        lock.withLock {
+            value += 1
+            return value
+        }
     }
 }
 
@@ -542,7 +801,7 @@ private extension TimerState {
         let ticker = SystemTicker { fires += 1 }
         defer { ticker.invalidate() }
 
-        let deadline = Date().addingTimeInterval(3)
+        let deadline = Date().addingTimeInterval(5)
         while fires < 2, Date() < deadline {
             RunLoop.main.run(mode: .eventTracking, before: Date().addingTimeInterval(0.1))
         }
@@ -552,11 +811,63 @@ private extension TimerState {
 
     @Test func stopsFiringOnceInvalidated() {
         var fires = 0
+        var controlFires = 0
         let ticker = SystemTicker { fires += 1 }
+        // proves the run loop below does fire tickers that are not invalidated
+        let control = SystemTicker { controlFires += 1 }
+        defer { control.invalidate() }
+
         ticker.invalidate()
+        let deadline = Date().addingTimeInterval(1.6)
+        while Date() < deadline {
+            RunLoop.main.run(mode: .default, before: min(deadline, Date().addingTimeInterval(0.1)))
+        }
 
-        RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(1.3))
-
+        #expect(controlFires >= 1)
         #expect(fires == 0)
+    }
+}
+
+/// The status item's button rendering, on a plain `NSButton` instead of a real status item.
+@MainActor
+@Suite struct StatusButtonRendererTests {
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        for _ in 0..<200 where !condition() {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    @Test func followsConsecutiveTicksAndTheCountdownToggle() async throws {
+        let h = Harness(shortcuts: [])
+        defer { h.cleanUp() }
+        let button = NSButton()
+        let renderer = StatusButtonRenderer(button: button, coordinator: h.coordinator)
+        renderer.start()
+        #expect(button.attributedTitle.string == "25:00")
+        #expect(button.imagePosition == .imageLeading)
+        #expect(button.image != nil)
+
+        h.coordinator.start()
+        h.clock.advance(1)
+        h.coordinator.tick()
+        try await waitUntil { button.attributedTitle.string == "24:59" }
+        #expect(button.attributedTitle.string == "24:59")
+
+        // a second change must still be observed: tracking re-registers after each one
+        h.clock.advance(1)
+        h.coordinator.tick()
+        try await waitUntil { button.attributedTitle.string == "24:58" }
+        #expect(button.attributedTitle.string == "24:58")
+
+        h.coordinator.toggleCountdown()
+        try await waitUntil { button.imagePosition == .imageOnly }
+        #expect(button.imagePosition == .imageOnly)
+        #expect(button.attributedTitle.string.isEmpty)
+
+        h.coordinator.toggleCountdown()
+        try await waitUntil { button.imagePosition == .imageLeading }
+        #expect(button.imagePosition == .imageLeading)
+        #expect(button.attributedTitle.string == "24:58")
+        await h.settle()
     }
 }

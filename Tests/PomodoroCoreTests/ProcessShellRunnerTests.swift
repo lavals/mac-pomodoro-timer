@@ -32,13 +32,27 @@ import Testing
         #expect(result.stderr.utf8.count == size)
     }
 
-    @Test func slowCommandTimesOut() async throws {
+    @Test func slowCommandTimesOutAndIsTerminated() async throws {
+        let marker = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pomodoro-timeout-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: marker) }
         let started = Date()
 
         await #expect(throws: ShellError.timeout) {
-            try await sh("sleep 5", timeout: 0.2)
+            try await sh("sleep 1; touch '\(marker.path)'", timeout: 0.2)
         }
-        #expect(Date().timeIntervalSince(started) < 3)
+        #expect(Date().timeIntervalSince(started) < 1)
+
+        // a terminated shell never gets to the touch
+        try await Task.sleep(for: .milliseconds(1500))
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+    }
+
+    @Test func outputOfAnInstantExitIsNeverLost() async throws {
+        for _ in 0..<200 {
+            let result = try await sh("printf x")
+            #expect(result.stdout == "x")
+        }
     }
 
     @Test func missingExecutableFailsToLaunch() async {

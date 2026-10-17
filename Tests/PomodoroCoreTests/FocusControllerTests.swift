@@ -102,10 +102,10 @@ import Testing
         #expect(await FocusController(runner: runner).setFocus(true).failure == .timeout)
     }
 
-    @Test func setFocusLaunchFailureMapsToNotInstalled() async {
+    @Test func setFocusLaunchFailureKeepsTheMessage() async {
         let runner = FakeShellRunner { _, _ in throw ShellError.launchFailed("no such file") }
 
-        #expect(await FocusController(runner: runner).setFocus(false).failure == .notInstalled)
+        #expect(await FocusController(runner: runner).setFocus(false).failure == .launchFailed("no such file"))
     }
 }
 

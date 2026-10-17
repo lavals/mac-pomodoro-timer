@@ -13,7 +13,6 @@ import Testing
     ])
     func hintMessagePerAvailability(_ availability: FocusAvailability, _ expected: String?) {
         #expect(FocusHintView.message(for: availability) == expected)
-        #expect(PopoverView.showsFocusHint(availability) == (expected != nil))
     }
 }
 
@@ -47,10 +46,7 @@ import Testing
         let h = Harness(shortcuts: [])
         defer { h.cleanUp() }
 
-        let window = SettingsWindowController.makeWindow(
-            title: "Set Up Focus",
-            rootView: FocusSetupView(coordinator: h.coordinator)
-        )
+        let window = HostedWindowController.focusSetup(coordinator: h.coordinator).window
 
         #expect(window.title == "Set Up Focus")
         #expect(!window.isReleasedWhenClosed)
@@ -62,14 +58,35 @@ import Testing
         #expect(!window.isVisible)
     }
 
-    @Test func popoverWithFocusHintKeepsItsWidth() async throws {
-        let h = Harness(shortcuts: [])
+    @Test func showingTheSetupWindowRechecksTheShortcuts() async throws {
+        let h = Harness()
         defer { h.cleanUp() }
-        await h.coordinator.refreshFocusAvailability().value
+        let controller = HostedWindowController.focusSetup(coordinator: h.coordinator)
+        #expect(h.runner.calls.isEmpty)
 
-        let popover = StatusItemController.makePopover(coordinator: h.coordinator)
+        controller.onShow()
 
-        let hosting = try #require(popover.contentViewController as? NSHostingController<PopoverView>)
-        #expect(hosting.view.fittingSize.width == 240)
+        for _ in 0..<100 where h.coordinator.focusAvailability != .available {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(h.coordinator.focusAvailability == .available)
+        #expect(h.runner.calls.map(\.args) == [["list"]])
+    }
+
+    @Test func popoverGrowsToShowTheFocusHint() async throws {
+        func popoverHeight(shortcuts: [String]) async throws -> CGFloat {
+            let h = Harness(shortcuts: shortcuts)
+            defer { h.cleanUp() }
+            await h.coordinator.refreshFocusAvailability().value
+            let popover = StatusItemController.makePopover(coordinator: h.coordinator, openSettings: {}, openFocusSetup: {})
+            let hosting = try #require(popover.contentViewController as? NSHostingController<PopoverView>)
+            #expect(hosting.view.fittingSize.width == 240)
+            return hosting.view.fittingSize.height
+        }
+
+        let withoutHint = try await popoverHeight(shortcuts: [FocusController.onName, FocusController.offName])
+        let withHint = try await popoverHeight(shortcuts: [])
+
+        #expect(withHint > withoutHint)
     }
 }

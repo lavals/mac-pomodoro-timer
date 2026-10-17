@@ -21,14 +21,13 @@ public struct GlyphSpec: Equatable, Sendable {
         self.arc = arc
     }
 
-    /// Glyph for `state`. `progress` is the coordinator's elapsed fraction and is clamped to 0...1.
+    /// Glyph for `state`. `progress` is the coordinator's elapsed fraction in 0...1.
     public static func make(state: TimerState, progress: Double) -> GlyphSpec {
-        let clamped = min(max(progress, 0), 1)
         switch state {
         case .idle:
             return GlyphSpec(style: .dimmed, arc: 0)
         case .running(let phase, _, _), .paused(let phase, _, _):
-            return GlyphSpec(style: style(for: phase), arc: clamped)
+            return GlyphSpec(style: style(for: phase), arc: progress)
         case .finished(let phase):
             return GlyphSpec(style: style(for: phase), arc: 1)
         }
