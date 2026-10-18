@@ -587,6 +587,62 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.coordinator.focusAvailability == .available)
     }
 
+    /// `shortcuts list` call 1 blocks until `release` is signalled and reports no shortcuts;
+    /// later calls report both.
+    private func staleFirstListing(_ h: Harness, release: DispatchSemaphore) {
+        let lists = Counter()
+        let listing = bothShortcuts.joined(separator: "\n")
+        h.runner.setHandler { _, args in
+            guard args == ["list"] else { return ShellResult(status: 0, stdout: "", stderr: "") }
+            if lists.increment() == 1 {
+                release.wait()
+                return ShellResult(status: 0, stdout: "", stderr: "")
+            }
+            return ShellResult(status: 0, stdout: listing, stderr: "")
+        }
+    }
+
+    /// Waits until the runner has recorded `count` calls.
+    private func waitForCalls(_ h: Harness, count: Int) async {
+        while h.runner.calls.count < count {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
+    @Test func anOlderAvailabilityCheckFinishingLastDoesNotOverwriteANewerOne() async {
+        let h = Harness(shortcuts: [])
+        defer { h.cleanUp() }
+        let release = DispatchSemaphore(value: 0)
+        staleFirstListing(h, release: release)
+
+        let older = h.coordinator.refreshFocusAvailability()
+        await waitForCalls(h, count: 1)
+        await h.coordinator.refreshFocusAvailability().value
+        #expect(h.coordinator.focusAvailability == .available)
+
+        release.signal()
+        await older.value
+        #expect(h.coordinator.focusAvailability == .available)
+    }
+
+    @Test func anOlderAvailabilityCheckDoesNotOverwriteTheCheckBeforeFocusOn() async {
+        let h = Harness(shortcuts: [])
+        defer { h.cleanUp() }
+        let release = DispatchSemaphore(value: 0)
+        staleFirstListing(h, release: release)
+
+        let older = h.coordinator.refreshFocusAvailability()
+        await waitForCalls(h, count: 1)
+        h.coordinator.start()
+        await h.settle()
+        #expect(h.focusRuns == [focusOn])
+        #expect(h.coordinator.focusAvailability == .available)
+
+        release.signal()
+        await older.value
+        #expect(h.coordinator.focusAvailability == .available)
+    }
+
     @Test func startWithMissingShortcutsRunsTheTimerWithoutRunningAShortcut() async {
         let h = Harness(shortcuts: [FocusController.onName])
         defer { h.cleanUp() }
@@ -951,6 +1007,45 @@ private let focusOff = ["run", FocusController.offName]
         #expect(relaunch.state == .finished(phase: .work))
         #expect(h.focusRuns == [focusOn, focusOff, focusOff])
         #expect(h.store.focusTurnedOn == false)
+    }
+
+    @Test func timerActionsDuringTerminationQueueNoFocusCalls() async {
+        let h = Harness()
+        defer { h.cleanUp() }
+        // the first On run hangs past the chain budget, so termination runs while it is in flight
+        let release = DispatchSemaphore(value: 0)
+        let ons = Counter()
+        let listing = bothShortcuts.joined(separator: "\n")
+        h.runner.setHandler { _, args in
+            if args == focusOn, ons.increment() == 1 { release.wait() }
+            return ShellResult(status: 0, stdout: args == ["list"] ? listing : "", stderr: "")
+        }
+        h.coordinator.start()
+        let running = h.coordinator.state
+        await waitForCalls(h, count: 2)
+
+        let quit = Task { await h.coordinator.prepareForTermination(chainBudget: .milliseconds(100)) }
+        while !h.coordinator.isTerminating { await Task.yield() }
+
+        // clicks and ticks while quitting change nothing and queue nothing
+        h.coordinator.pause()
+        h.coordinator.start()
+        h.coordinator.skip()
+        h.clock.advance(1500)
+        h.coordinator.tick()
+        #expect(h.coordinator.state == running)
+        #expect(h.store.load() == running)
+        #expect(h.alerts.chimes.isEmpty)
+
+        await quit.value
+        #expect(h.focusRuns == [focusOn, focusOff])
+        #expect(h.store.focusTurnedOn)
+
+        // the orphaned On finishes; nothing was queued behind it, the flag stays set for relaunch
+        release.signal()
+        await h.settle()
+        #expect(h.focusRuns == [focusOn, focusOff])
+        #expect(h.store.focusTurnedOn)
     }
 
     @Test(arguments: [

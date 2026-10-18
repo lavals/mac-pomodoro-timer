@@ -15,6 +15,11 @@ import Observation
 /// mid-session never leaves Focus on. A Focus the user turns on while no work phase runs stays
 /// alone; one that was already on when work started is turned off with the app's own (the
 /// current Focus state cannot be read, so the app cannot tell the two apart).
+///
+/// Availability checks may overlap (popover, setup window, Focus On); results apply in start
+/// order, so an older check that finishes late never overwrites a newer one. Once
+/// `prepareForTermination` starts, timer actions and ticks do nothing, so no Focus call is
+/// queued behind the termination Off.
 @MainActor
 @Observable
 public final class TimerCoordinator {
@@ -39,6 +44,11 @@ public final class TimerCoordinator {
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
     @ObservationIgnored private let wakeCenter: NotificationCenter
     @ObservationIgnored private let focusOffRetryDelay: Duration
+    /// Number of the last availability check started / applied (see `applyAvailability`).
+    @ObservationIgnored private var availabilityChecksStarted = 0
+    @ObservationIgnored private var availabilityCheckApplied = 0
+    /// Set when `prepareForTermination` starts; timer actions and ticks are ignored from then on.
+    @ObservationIgnored private(set) var isTerminating = false
 
     /// Restores the saved session, saves the reconciled state and performs the restore effects.
     /// If the last run left `SessionStore.focusTurnedOn` set and no work phase is still running,
@@ -153,16 +163,32 @@ public final class TimerCoordinator {
     }
 
     /// Re-checks whether both Focus shortcuts exist. Returns the task so callers can await it.
+    /// The result is dropped if a check started later has already been applied.
     @discardableResult
     public func refreshFocusAvailability() -> Task<Void, Never> {
-        Task { [weak self, focus] in
+        let check = startAvailabilityCheck()
+        return Task { [weak self, focus] in
             let availability = await focus.availability()
-            self?.focusAvailability = availability
+            self?.applyAvailability(availability, check: check)
         }
     }
 
-    /// Called before the app quits: lets queued Focus calls finish (at most `chainBudget`), then
-    /// turns Focus off if the app turned it on (at most `offBudget`). An Off that failed (not
+    /// Numbers a new availability check in start order.
+    private func startAvailabilityCheck() -> Int {
+        availabilityChecksStarted += 1
+        return availabilityChecksStarted
+    }
+
+    /// Applies a check's result unless a check started after it was applied already.
+    private func applyAvailability(_ availability: FocusAvailability, check: Int) {
+        guard check > availabilityCheckApplied else { return }
+        availabilityCheckApplied = check
+        focusAvailability = availability
+    }
+
+    /// Called before the app quits: from here on timer actions and ticks do nothing (so nothing
+    /// new is queued behind the Off), then lets queued Focus calls finish (at most `chainBudget`),
+    /// then turns Focus off if the app turned it on (at most `offBudget`). An Off that failed (not
     /// one that timed out: a stuck `shortcuts` run will not recover in time) is retried once
     /// after `retryDelay`, again within `offBudget`. Bounded so quitting never hangs on a stuck
     /// `shortcuts` run: with the defaults at most 1.5 + 2 + 0.5 + 2 = 6s, under the 10s
@@ -176,6 +202,7 @@ public final class TimerCoordinator {
         offBudget: Duration = .seconds(2),
         retryDelay: Duration = .milliseconds(500)
     ) async {
+        isTerminating = true
         var chainFinished = true
         if let pendingEffects {
             chainFinished = await Self.value(of: pendingEffects, within: chainBudget) != nil
@@ -224,6 +251,7 @@ public final class TimerCoordinator {
     // MARK: effects
 
     private func mutate(_ transition: (inout TimerEngine, Date) -> [Effect]) {
+        guard !isTerminating else { return }
         now = clock()
         let effects = transition(&engine, now)
         apply(effects)
@@ -264,7 +292,9 @@ public final class TimerCoordinator {
     /// Runs Focus On when both shortcuts exist, re-checking unless the last check found them.
     private func turnFocusOn() async {
         if focusAvailability != .available {
-            focusAvailability = await focus.availability()
+            let check = startAvailabilityCheck()
+            let availability = await focus.availability()
+            applyAvailability(availability, check: check)
         }
         guard focusAvailability == .available else { return }
         // marked before the run so a quit while it is in flight still turns Focus off
