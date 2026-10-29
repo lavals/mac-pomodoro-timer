@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    # a hung step would otherwise hold the runner for GitHub's 6h default
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Test
+        timeout-minutes: 10
+        run: make test
+
+      - name: Build and verify app bundle
+        run: make verify-app
+
+      - name: Check cask template
+        run: make check-cask
+
+      - name: Check docs
+        run: make check-docs
