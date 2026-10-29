@@ -15,10 +15,13 @@ concurrency:
 jobs:
   build:
     runs-on: macos-26
+    # a hung step would otherwise hold the runner for GitHub's 6h default
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
       - name: Test
+        timeout-minutes: 10
         run: make test
 
       - name: Build and verify app bundle

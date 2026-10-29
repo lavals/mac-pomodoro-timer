@@ -83,7 +83,7 @@ private let focusOn = ["run", FocusController.onName]
 private let focusOff = ["run", FocusController.offName]
 
 @MainActor
-@Suite struct TimerCoordinatorTests {
+@Suite(.timeLimit(.minutes(1))) struct TimerCoordinatorTests {
     // MARK: persistence and focus around actions
 
     @Test func startSavesStateAndTurnsFocusOn() async {
@@ -587,15 +587,15 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.coordinator.focusAvailability == .available)
     }
 
-    /// `shortcuts list` call 1 blocks until `release` is signalled and reports no shortcuts;
+    /// `shortcuts list` call 1 is held open until `release` opens and reports no shortcuts;
     /// later calls report both.
-    private func staleFirstListing(_ h: Harness, release: DispatchSemaphore) {
+    private func staleFirstListing(_ h: Harness, release: Gate) {
         let lists = Counter()
         let listing = bothShortcuts.joined(separator: "\n")
         h.runner.setHandler { _, args in
             guard args == ["list"] else { return ShellResult(status: 0, stdout: "", stderr: "") }
             if lists.increment() == 1 {
-                release.wait()
+                await release.wait()
                 return ShellResult(status: 0, stdout: "", stderr: "")
             }
             return ShellResult(status: 0, stdout: listing, stderr: "")
@@ -612,7 +612,7 @@ private let focusOff = ["run", FocusController.offName]
     @Test func anOlderAvailabilityCheckFinishingLastDoesNotOverwriteANewerOne() async {
         let h = Harness(shortcuts: [])
         defer { h.cleanUp() }
-        let release = DispatchSemaphore(value: 0)
+        let release = Gate()
         staleFirstListing(h, release: release)
 
         let older = h.coordinator.refreshFocusAvailability()
@@ -620,7 +620,7 @@ private let focusOff = ["run", FocusController.offName]
         await h.coordinator.refreshFocusAvailability().value
         #expect(h.coordinator.focusAvailability == .available)
 
-        release.signal()
+        release.open()
         await older.value
         #expect(h.coordinator.focusAvailability == .available)
     }
@@ -628,7 +628,7 @@ private let focusOff = ["run", FocusController.offName]
     @Test func anOlderAvailabilityCheckDoesNotOverwriteTheCheckBeforeFocusOn() async {
         let h = Harness(shortcuts: [])
         defer { h.cleanUp() }
-        let release = DispatchSemaphore(value: 0)
+        let release = Gate()
         staleFirstListing(h, release: release)
 
         let older = h.coordinator.refreshFocusAvailability()
@@ -638,7 +638,7 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.focusRuns == [focusOn])
         #expect(h.coordinator.focusAvailability == .available)
 
-        release.signal()
+        release.open()
         await older.value
         #expect(h.coordinator.focusAvailability == .available)
     }
@@ -914,10 +914,10 @@ private let focusOff = ["run", FocusController.offName]
         h.coordinator.start()
         await h.settle()
         // the Off run hangs until the test releases it
-        let release = DispatchSemaphore(value: 0)
+        let release = Gate()
         let finished = Flag()
         h.runner.setHandler { _, _ in
-            release.wait()
+            await release.wait()
             finished.set()
             return ShellResult(status: 0, stdout: "", stderr: "")
         }
@@ -928,7 +928,7 @@ private let focusOff = ["run", FocusController.offName]
         // an Off that ran out of budget is not retried
         #expect(h.focusRuns == [focusOn, focusOff])
         #expect(h.store.focusTurnedOn)
-        release.signal()
+        release.open()
     }
 
     @Test func failedFocusOffAtQuitIsRetriedOnce() async {
@@ -974,10 +974,10 @@ private let focusOff = ["run", FocusController.offName]
         let h = Harness()
         defer { h.cleanUp() }
         // the On run hangs past the chain budget; the termination Off succeeds first
-        let release = DispatchSemaphore(value: 0)
+        let release = Gate()
         let listing = bothShortcuts.joined(separator: "\n")
         h.runner.setHandler { _, args in
-            if args == focusOn { release.wait() }
+            if args == focusOn { await release.wait() }
             return ShellResult(status: 0, stdout: args == ["list"] ? listing : "", stderr: "")
         }
         h.coordinator.start()
@@ -988,7 +988,7 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.store.focusTurnedOn)
 
         // the orphaned On finishes after the Off and leaves Focus on
-        release.signal()
+        release.open()
         await h.settle()
         #expect(h.store.focusTurnedOn)
 
@@ -1013,11 +1013,11 @@ private let focusOff = ["run", FocusController.offName]
         let h = Harness()
         defer { h.cleanUp() }
         // the first On run hangs past the chain budget, so termination runs while it is in flight
-        let release = DispatchSemaphore(value: 0)
+        let release = Gate()
         let ons = Counter()
         let listing = bothShortcuts.joined(separator: "\n")
         h.runner.setHandler { _, args in
-            if args == focusOn, ons.increment() == 1 { release.wait() }
+            if args == focusOn, ons.increment() == 1 { await release.wait() }
             return ShellResult(status: 0, stdout: args == ["list"] ? listing : "", stderr: "")
         }
         h.coordinator.start()
@@ -1042,7 +1042,7 @@ private let focusOff = ["run", FocusController.offName]
         #expect(h.store.focusTurnedOn)
 
         // the orphaned On finishes; nothing was queued behind it, the flag stays set for relaunch
-        release.signal()
+        release.open()
         await h.settle()
         #expect(h.focusRuns == [focusOn, focusOff])
         #expect(h.store.focusTurnedOn)

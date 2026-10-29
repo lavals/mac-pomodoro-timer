@@ -6,7 +6,7 @@ import Testing
 @testable import PomodoroCore
 
 @MainActor
-@Suite struct LaunchAtLoginModelTests {
+@Suite(.timeLimit(.minutes(1))) struct LaunchAtLoginModelTests {
     @Test func mirrorsStatusOnInit() {
         #expect(LaunchAtLoginModel(service: FakeLoginService(status: .enabled), isBundled: true).isEnabled)
         let off = LaunchAtLoginModel(service: FakeLoginService(status: .notRegistered), isBundled: true)

@@ -25,7 +25,7 @@ private let glyphTable: [GlyphCase] = [
     .init(state: .finished(phase: .rest), progress: 0, expected: .init(style: .outlined, arc: 1)),
 ]
 
-@Suite struct GlyphSpecTests {
+@Suite(.timeLimit(.minutes(1))) struct GlyphSpecTests {
     @Test(arguments: glyphTable)
     func mapping(_ row: GlyphCase) {
         #expect(GlyphSpec.make(state: row.state, progress: row.progress) == row.expected)

@@ -4,7 +4,7 @@ import Testing
 
 /// The real one-second ticker. Runs the main run loop by hand, so it must stay on the main actor.
 @MainActor
-@Suite(.serialized) struct SystemTickerTests {
+@Suite(.serialized, .timeLimit(.minutes(1))) struct SystemTickerTests {
     /// The status item's menu runs the main run loop in event-tracking mode; a timer scheduled
     /// only in the default mode would freeze the countdown while the menu is open.
     @Test func keepsFiringWhileAMenuIsTracking() {

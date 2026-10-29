@@ -3,7 +3,7 @@ import SwiftUI
 import Testing
 @testable import PomodoroCore
 
-@Suite struct FocusHintTests {
+@Suite(.timeLimit(.minutes(1))) struct FocusHintTests {
     @Test(arguments: [
         (FocusAvailability.unknown, String?.none),
         (.available, nil),
@@ -17,7 +17,7 @@ import Testing
 }
 
 @MainActor
-@Suite struct FocusSetupTests {
+@Suite(.timeLimit(.minutes(1))) struct FocusSetupTests {
     @Test func stepsNameBothShortcutsExactly() {
         let text = FocusSetupView.steps.joined(separator: "\n")
         #expect(text.contains("“\(FocusController.onName)”"))

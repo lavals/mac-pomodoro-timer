@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import PomodoroCore
 
-@Suite struct TimeFormattingTests {
+@Suite(.timeLimit(.minutes(1))) struct TimeFormattingTests {
     @Test(arguments: [
         (0.0, "00:00"),
         (59.0, "00:59"),

@@ -32,7 +32,7 @@ private let presentationTable: [PresentationCase] = [
           tint: .secondaryLabelColor, controls: [.reset], secondary: .reset),
 ]
 
-@Suite struct TimerPresentationTests {
+@Suite(.timeLimit(.minutes(1))) struct TimerPresentationTests {
     @Test(arguments: presentationTable)
     func mappings(_ row: PresentationCase) {
         #expect(TimerPresentation.primaryAction(for: row.state) == row.action)

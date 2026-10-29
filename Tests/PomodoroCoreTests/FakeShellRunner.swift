@@ -9,7 +9,9 @@ final class FakeShellRunner: ShellRunner, @unchecked Sendable {
         let timeout: Duration
     }
 
-    typealias Handler = @Sendable (_ executable: String, _ args: [String]) throws -> ShellResult
+    /// Async so a handler can hold a call open with `await gate.wait()`. Never block a thread
+    /// here: `run` executes on the shared cooperative pool, which has one thread per core.
+    typealias Handler = @Sendable (_ executable: String, _ args: [String]) async throws -> ShellResult
 
     private let lock = NSLock()
     private var recorded: [Call] = []
@@ -43,6 +45,6 @@ final class FakeShellRunner: ShellRunner, @unchecked Sendable {
             recorded.append(Call(executable: executable, args: args, timeout: timeout))
             return handler
         }
-        return try current(executable, args)
+        return try await current(executable, args)
     }
 }

@@ -4,7 +4,7 @@ import Testing
 
 /// The status item's button rendering, on a plain `NSButton` instead of a real status item.
 @MainActor
-@Suite struct StatusButtonRendererTests {
+@Suite(.timeLimit(.minutes(1))) struct StatusButtonRendererTests {
     private func waitUntil(_ condition: () -> Bool) async throws {
         for _ in 0..<200 where !condition() {
             try await Task.sleep(for: .milliseconds(10))

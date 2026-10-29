@@ -3,7 +3,7 @@ import Testing
 import UserNotifications
 @testable import PomodoroCore
 
-@Suite struct AlertsTests {
+@Suite(.timeLimit(.minutes(1))) struct AlertsTests {
     @Test(arguments: [Chime.workEnded, .restEnded])
     func systemAlertsSoundsExist(_ chime: Chime) {
         // loads the system sound without playing it

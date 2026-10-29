@@ -4,7 +4,7 @@ import Testing
 @testable import PomodoroCore
 
 @MainActor
-@Suite struct SettingsWindowTests {
+@Suite(.timeLimit(.minutes(1))) struct SettingsWindowTests {
     @Test func windowIsReusableTitledAndFixedSize() {
         let testDefaults = TestDefaults()
         defer { testDefaults.cleanUp() }

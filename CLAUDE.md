@@ -16,7 +16,9 @@ Swift Package: library `PomodoroCore` (all code), thin executable `Pomodoro` (`m
 
 - Swift Testing only (`import Testing`, `@Test`, `#expect`). XCTest is not available without Xcode.
 - Tests run in parallel with no teardown: `UserDefaults` tests use a unique suite name per test and remove the domain in `defer`. Coordinator tests `await h.settle()` before returning so queued Focus tasks do not outlive the test.
-- Exception: `SystemTickerTests` are `.serialized` and spin `RunLoop.main` by hand (`.eventTracking` and `.default` modes) for up to a few seconds, blocking other `@MainActor` tests meanwhile. Do not assert tight wall-clock bounds in main-actor tests; prove bounds with a semaphore instead (see `prepareForTerminationIsBoundedWhenTheShortcutHangs`).
+- Exception: `SystemTickerTests` are `.serialized` and spin `RunLoop.main` by hand (`.eventTracking` and `.default` modes) for up to a few seconds, blocking other `@MainActor` tests meanwhile. Do not assert tight wall-clock bounds in main-actor tests; prove bounds by holding the fake call open with a `Gate` instead (see `prepareForTerminationIsBoundedWhenTheShortcutHangs`).
+- Never block a thread in async code or in a `FakeShellRunner` handler (`DispatchSemaphore.wait()`, `Thread.sleep`, sync waits): use `await gate.wait()` (`Gate` in `TestSupport.swift`). All tests start at once and the cooperative pool has one thread per core (3 on GitHub's macOS runners), so a few blocked threads starve the whole process, including `Task.sleep` wake-ups, and `make test` hangs until the CI timeout while passing on a many-core Mac.
+- Every `@Suite` carries `.timeLimit(.minutes(1))`; keep it on new suites so a hung test fails by name. CI also caps the Test step at 10 minutes.
 - Never run the real `/usr/bin/shortcuts run ...` in tests; use `FakeShellRunner`. Same for alerts (`FakeAlerts`) and time (inject `now`).
 - Shell scripts, workflows and docs are checked by Makefile targets and CI, not Swift tests.
 

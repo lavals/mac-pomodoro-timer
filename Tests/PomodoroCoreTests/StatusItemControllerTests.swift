@@ -4,7 +4,7 @@ import Testing
 @testable import PomodoroCore
 
 @MainActor
-@Suite struct StatusItemControllerTests {
+@Suite(.timeLimit(.minutes(1))) struct StatusItemControllerTests {
     @Test func buildsMenuFromPresentationItems() {
         let items = TimerPresentation.menuItems(for: .running(phase: .work, endDate: t0, total: 1500))
         let menu = StatusItemController.makeMenu(items: items, showCountdown: true, target: nil, action: nil)

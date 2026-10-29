@@ -3,7 +3,7 @@ import Testing
 @testable import PomodoroCore
 
 /// Exercises the real `Process` plumbing with `/bin/sh -c`, never with `/usr/bin/shortcuts`.
-@Suite struct ProcessShellRunnerTests {
+@Suite(.timeLimit(.minutes(1))) struct ProcessShellRunnerTests {
     private let runner = ProcessShellRunner()
 
     private func sh(_ script: String, timeout: Duration = .seconds(10)) async throws -> ShellResult {

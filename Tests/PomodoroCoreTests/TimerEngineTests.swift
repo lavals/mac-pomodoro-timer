@@ -124,7 +124,7 @@ private let restoreTable: [RestoreCase] = [
     .init(saved: .finished(phase: .rest), state: .finished(phase: .rest), effects: []),
 ]
 
-@Suite struct TimerEngineTests {
+@Suite(.timeLimit(.minutes(1))) struct TimerEngineTests {
     @Test(arguments: transitionTable)
     func transition(_ row: TransitionCase) {
         var engine = TimerEngine(state: row.from)

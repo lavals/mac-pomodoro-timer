@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import PomodoroCore
 
-@Suite struct PreferencesTests {
+@Suite(.timeLimit(.minutes(1))) struct PreferencesTests {
     @Test func defaultsWhenSuiteIsEmpty() {
         let testDefaults = TestDefaults()
         defer { testDefaults.cleanUp() }

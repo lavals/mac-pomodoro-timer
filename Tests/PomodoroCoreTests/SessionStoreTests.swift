@@ -15,7 +15,7 @@ private let everyState: [TimerState] = [
     .finished(phase: .rest),
 ]
 
-@Suite struct SessionStoreTests {
+@Suite(.timeLimit(.minutes(1))) struct SessionStoreTests {
     @Test(arguments: everyState)
     func saveLoadRoundTrip(_ state: TimerState) {
         let testDefaults = TestDefaults()

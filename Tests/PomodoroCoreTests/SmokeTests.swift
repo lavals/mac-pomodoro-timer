@@ -1,7 +1,7 @@
 import Testing
 @testable import PomodoroCore
 
-@Suite struct SmokeTests {
+@Suite(.timeLimit(.minutes(1))) struct SmokeTests {
     @Test func versionIsNonEmpty() {
         #expect(!AppInfo.version.isEmpty)
     }

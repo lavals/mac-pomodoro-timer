@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import PomodoroCore
 
-@Suite struct FocusControllerTests {
+@Suite(.timeLimit(.minutes(1))) struct FocusControllerTests {
     // MARK: availability
 
     @Test func bothShortcutsPresentIsAvailable() async {

@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import PomodoroCore
 
-@Suite struct StatusTitleTests {
+@Suite(.timeLimit(.minutes(1))) struct StatusTitleTests {
     @Test func hiddenIsEmpty() {
         #expect(StatusTitle.make(time: "25:00", tint: .controlAccentColor, showCountdown: false).length == 0)
     }
